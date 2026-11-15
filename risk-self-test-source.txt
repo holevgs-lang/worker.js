@@ -1,0 +1,80 @@
+if (url.pathname === "/paper-risk-self-test") {
+  const authError = controlAuthError(request, env, "POST");
+  if (authError) return authError;
+
+  // Только синтетические объекты в памяти. Никаких KV, fetch, очереди или позиций.
+  const now = Date.now();
+  const matrix = {};
+  for (const a of SYMBOLS) {
+    matrix[a] = {};
+    for (const b of SYMBOLS) matrix[a][b] = a === b ? 1 : 0.2;
+  }
+  matrix["BTC-USDT-SWAP"]["ETH-USDT-SWAP"] = 0.82;
+  matrix["ETH-USDT-SWAP"]["BTC-USDT-SWAP"] = 0.82;
+  const freshCorrelation = { matrix, calculatedAt: new Date(now).toISOString() };
+  const config = {
+    maxOpenPositions: 12, maxPositionsPerSymbol: 2,
+    riskPerTrade: 5, maxRiskPerSymbol: 10, maxTotalRisk: 60,
+    maxCorrelatedRisk: 15, correlationThreshold: 0.75,
+    leverage: 2, feeRate: 0.0005, slippageRate: 0.0002
+  };
+  const instrument = {
+    state: "live", contractType: "linear", contractValue: 0.01,
+    lotSize: 1, minSize: 1
+  };
+  const base = {
+    symbol: "BTC-USDT-SWAP", action: "OPEN_LONG", activePositions: [],
+    correlationSnapshot: freshCorrelation, config, instrument,
+    entry: 100, stopLoss: 99, balance: 500
+  };
+  const run = overrides => evaluatePaperRiskAdmission({ ...base, ...overrides });
+  const openPosition = (symbol, action = "OPEN_LONG", actualRisk = 1, requiredMargin = 10) => ({
+    symbol, action, status: "OPEN", actualRisk, requiredMargin
+  });
+
+  const allowed = run({});
+  const totalLimit = run({ activePositions: Array.from({ length: 12 }, () => openPosition("SOL-USDT-SWAP")) });
+  const symbolLimit = run({ activePositions: [openPosition(base.symbol), openPosition(base.symbol)] });
+  const oppositeDirection = run({ activePositions: [openPosition(base.symbol, "OPEN_SHORT")] });
+  const correlatedLimit = run({ activePositions: [openPosition("ETH-USDT-SWAP", "OPEN_LONG", 15)] });
+  const insufficientMargin = run({ balance: 1 });
+  const staleCorrelation = run({
+    activePositions: [openPosition("ETH-USDT-SWAP")],
+    correlationSnapshot: { matrix, calculatedAt: new Date(now - CORRELATION_MAX_AGE_MS - 1).toISOString() }
+  });
+  const perSymbolRiskLimit = run({ activePositions: [openPosition(base.symbol, "OPEN_LONG", 10)] });
+
+  const checks = {
+    validEntryAllowedWithinRisk: allowed.ok && allowed.size.actualRisk <= config.riskPerTrade + 1e-8,
+    totalPositionLimitEnforced: !totalLimit.ok && totalLimit.error.includes("общий лимит"),
+    perSymbolPositionLimitEnforced: !symbolLimit.ok && symbolLimit.error.includes("лимит двух позиций"),
+    oppositeDirectionBlocked: !oppositeDirection.ok && oppositeDirection.error.includes("встречную позицию"),
+    correlatedRiskLimitEnforced: !correlatedLimit.ok,
+    insufficientMarginBlocked: !insufficientMargin.ok && insufficientMargin.error.includes("маржи"),
+    staleCorrelationFailsClosed: !staleCorrelation.ok && staleCorrelation.error.includes("корреляции"),
+    perSymbolRiskLimitEnforced: !perSymbolRiskLimit.ok
+  };
+
+  return json({
+    ok: Object.values(checks).every(Boolean),
+    mode: "DEMO ONLY",
+    executionEnabled: false,
+    testType: "PURE_SYNTHETIC_IN_MEMORY_NO_SIDE_EFFECTS",
+    checks,
+    scenarios: {
+      allowed: allowed.ok ? { riskBudget: allowed.riskBudget, actualRisk: allowed.size.actualRisk, requiredMargin: allowed.size.requiredMargin } : allowed,
+      totalLimit: totalLimit.error,
+      symbolLimit: symbolLimit.error,
+      oppositeDirection: oppositeDirection.error,
+      correlatedLimit: correlatedLimit.error,
+      insufficientMargin: insufficientMargin.error,
+      staleCorrelation: staleCorrelation.error,
+      perSymbolRiskLimit: perSymbolRiskLimit.error
+    },
+    sideEffects: {
+      kvRead: false, kvWrite: false, marketDataRequests: false,
+      queueProcessed: false, positionsOpened: false
+    }
+  });
+}
+

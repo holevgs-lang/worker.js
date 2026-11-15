@@ -1,0 +1,10 @@
+﻿const fs = require("fs");
+const s = fs.readFileSync("worker.js", "utf8");
+const start = s.indexOf('if (url.pathname === "/paper-risk-self-test")');
+if (start < 0) throw new Error("Risk self-test route not found");
+const next = s.indexOf('if (url.pathname === ', start + 10);
+const end = next < 0 ? s.length : next;
+const out = s.slice(start, end);
+fs.writeFileSync("risk-self-test-source.txt", out, "utf8");
+console.log("Created risk-self-test-source.txt");
+console.log("Bytes: " + Buffer.byteLength(out, "utf8"));
