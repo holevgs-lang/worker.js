@@ -1123,26 +1123,48 @@ function calculateCorrelationMatrix(marketData) {
 }
 
 function getCorrelationRisk(symbol, activePositions, correlationSnapshot, threshold) {
-  if (!correlationSnapshot || !correlationSnapshot.matrix ||
-      !Number.isFinite(Date.parse(correlationSnapshot.calculatedAt)) ||
-      Date.now() - Date.parse(correlationSnapshot.calculatedAt) > CORRELATION_MAX_AGE_MS) {
-    return { ok: false, error: "Нет свежего снимка корреляции; новые позиции временно запрещены" };
+  const now = Date.now();
+  const calculatedAt = Date.parse(correlationSnapshot?.calculatedAt);
+  if (
+    typeof symbol !== "string" || !symbol ||
+    !Array.isArray(activePositions) ||
+    !Number.isFinite(threshold) || threshold < 0 || threshold > 1 ||
+    !correlationSnapshot || !correlationSnapshot.matrix ||
+    !Number.isFinite(calculatedAt) || calculatedAt > now ||
+    now - calculatedAt > CORRELATION_MAX_AGE_MS
+  ) {
+    return { ok: false, error: "Нет корректного свежего снимка корреляции; новые позиции временно запрещены" };
   }
 
   let correlatedRisk = 0;
   const correlatedSymbols = [];
 
   for (const position of activePositions) {
+    if (!position || typeof position.symbol !== "string" || !position.symbol) {
+      return { ok: false, error: "Обнаружена некорректная открытая позиция при проверке корреляционного риска" };
+    }
     if (position.symbol === symbol) continue;
+
     const correlation = correlationSnapshot.matrix?.[symbol]?.[position.symbol];
-    if (!Number.isFinite(correlation)) {
+    if (!Number.isFinite(correlation) || correlation < -1 || correlation > 1) {
       return {
         ok: false,
-        error: `Недостаточно данных корреляции для ${symbol} и ${position.symbol}`
+        error: "Недостаточно корректных данных корреляции для " + symbol + " и " + position.symbol
       };
     }
     if (Math.abs(correlation) >= threshold) {
-      correlatedRisk += Number(position.actualRisk || position.plannedStopRisk || 0);
+      const rawRisk = position.actualRisk ?? position.plannedStopRisk;
+      const positionRisk = Number(rawRisk);
+      if (!Number.isFinite(positionRisk) || positionRisk <= 0) {
+        return {
+          ok: false,
+          error: "Невозможно подтвердить риск коррелирующей позиции " + position.symbol + "; новые входы запрещены"
+        };
+      }
+      correlatedRisk += positionRisk;
+      if (!Number.isFinite(correlatedRisk)) {
+        return { ok: false, error: "Переполнение суммы корреляционного риска" };
+      }
       correlatedSymbols.push({ symbol: position.symbol, correlation });
     }
   }
@@ -1159,8 +1181,14 @@ function getExecutionPrices(referencePrice, action, isEntry, slippageRate) {
 async function getFundingPayments(symbol, openedAt, closedAt, contracts, contractValue, direction) {
   const from = Date.parse(openedAt);
   const to = Date.parse(closedAt);
-  if (!Number.isFinite(from) || !Number.isFinite(to)) {
-    throw new Error(`Некорректные даты для расчёта Funding по ${symbol}`);
+  if (
+    typeof symbol !== "string" || !SYMBOLS.includes(symbol) ||
+    !Number.isFinite(from) || !Number.isFinite(to) ||
+    !Number.isFinite(contracts) || contracts <= 0 ||
+    !Number.isFinite(contractValue) || contractValue <= 0 ||
+    ![-1, 1].includes(direction)
+  ) {
+    throw new Error("Некорректные параметры для расчёта Funding по " + symbol);
   }
   if (to <= from) {
     return { fundingPnl: 0, events: [] };
@@ -1173,22 +1201,22 @@ async function getFundingPayments(symbol, openedAt, closedAt, contracts, contrac
   const response = await fetch(endpoint.toString(), { headers: { Accept: "application/json" } });
   const data = await response.json();
   if (!response.ok || data.code !== "0" || !Array.isArray(data.data)) {
-    throw new Error(`Не удалось получить историю Funding для ${symbol}: ${data.msg || data.code || response.status}`);
+    throw new Error("Не удалось получить историю Funding для " + symbol + ": " + (data.msg || data.code || response.status));
+  }
+
+  const allFundingTimes = data.data.map(row => Number(row?.fundingTime));
+  if (!allFundingTimes.length || allFundingTimes.some(timestamp => !Number.isFinite(timestamp))) {
+    throw new Error("История Funding для " + symbol + " неполная или содержит некорректные временные метки; закрытие отложено");
+  }
+  const oldestReturned = Math.min(...allFundingTimes);
+  if (from < oldestReturned) {
+    throw new Error("История Funding для " + symbol + " не покрывает весь срок позиции (получено не более 400 записей); сделка оставлена открытой до получения полного расчёта");
   }
 
   const fundingRows = data.data
     .map(row => ({ ...row, fundingTimestamp: Number(row.fundingTime) }))
-    .filter(row => Number.isFinite(row.fundingTimestamp) && row.fundingTimestamp > from && row.fundingTimestamp <= to)
+    .filter(row => row.fundingTimestamp > from && row.fundingTimestamp <= to)
     .sort((a, b) => a.fundingTimestamp - b.fundingTimestamp);
-
-  const allFundingTimes = data.data.map(row => Number(row.fundingTime)).filter(Number.isFinite);
-  const oldestReturned = allFundingTimes.length ? Math.min(...allFundingTimes) : null;
-  if (Number.isFinite(oldestReturned) && from < oldestReturned) {
-    throw new Error(`История Funding для ${symbol} не покрывает весь срок позиции; сделка оставлена открытой до получения полного расчёта`);
-  }
-  if (!allFundingTimes.length) {
-    throw new Error(`OKX не вернул историю Funding для ${symbol}; сделка оставлена открытой до получения подтверждённых данных`);
-  }
 
   const events = [];
   let fundingPnl = 0;
@@ -1196,7 +1224,7 @@ async function getFundingPayments(symbol, openedAt, closedAt, contracts, contrac
   for (const row of fundingRows) {
     const realizedRate = Number(row.realizedRate);
     if (!Number.isFinite(realizedRate)) {
-      throw new Error(`OKX не вернул фактический realizedRate для ${symbol} на ${row.fundingTime}`);
+      throw new Error("OKX не вернул фактический realizedRate для " + symbol + " на " + row.fundingTime);
     }
 
     // Соблюдаем лимит публичного OKX API при пакетном закрытии нескольких позиций.
@@ -1211,7 +1239,7 @@ async function getFundingPayments(symbol, openedAt, closedAt, contracts, contrac
     const markResponse = await fetch(markEndpoint.toString(), { headers: { Accept: "application/json" } });
     const markData = await markResponse.json();
     if (!markResponse.ok || markData.code !== "0" || !Array.isArray(markData.data)) {
-      throw new Error(`Не удалось получить историческую mark price для Funding ${symbol}: ${markData.msg || markData.code || markResponse.status}`);
+      throw new Error("Не удалось получить историческую mark price для Funding " + symbol + ": " + (markData.msg || markData.code || markResponse.status));
     }
 
     const markRows = markData.data
@@ -1221,21 +1249,20 @@ async function getFundingPayments(symbol, openedAt, closedAt, contracts, contrac
         close: Number(candle[4])
       }))
       .filter(candle => Number.isFinite(candle.timestamp) && Number.isFinite(candle.open) && Number.isFinite(candle.close) && candle.open > 0 && candle.close > 0);
-    const markCandle = markRows.find(candle => candle.timestamp === row.fundingTimestamp) ||
-      markRows.find(candle => candle.timestamp + 60000 === row.fundingTimestamp) ||
-      markRows.sort((a, b) => Math.abs(a.timestamp - row.fundingTimestamp) - Math.abs(b.timestamp - row.fundingTimestamp))[0];
 
-    if (!markCandle || Math.abs(markCandle.timestamp - row.fundingTimestamp) > 60000) {
-      throw new Error(`Не найдена mark price в момент Funding ${symbol} ${row.fundingTime}`);
+    // Допускается только точная свеча события или непосредственно предыдущая минутная свеча.
+    const exactCandle = markRows.find(candle => candle.timestamp === row.fundingTimestamp);
+    const previousCandle = markRows.find(candle => candle.timestamp + 60000 === row.fundingTimestamp);
+    const markCandle = exactCandle || previousCandle;
+    if (!markCandle) {
+      throw new Error("Не найдена точная или непосредственно предшествующая mark-свеча для Funding " + symbol + " " + row.fundingTime);
     }
-    const settlementMarkPrice = markCandle.timestamp === row.fundingTimestamp
-      ? markCandle.open
-      : markCandle.close;
 
-    // Положительная ставка: LONG платит, SHORT получает; отрицательная — наоборот.
+    const settlementMarkPrice = exactCandle ? exactCandle.open : previousCandle.close;
     const eventPnl = -direction * contracts * contractValue * settlementMarkPrice * realizedRate;
     if (!Number.isFinite(eventPnl)) throw new Error("Некорректный расчёт Funding");
     fundingPnl += eventPnl;
+    if (!Number.isFinite(fundingPnl)) throw new Error("Переполнение итогового расчёта Funding");
     events.push({
       fundingTime: new Date(row.fundingTimestamp).toISOString(),
       realizedRate,
@@ -1436,17 +1463,31 @@ function alignPriceToTick(price, tickSize, mode = "nearest") {
 }
 
 function calculateExistingPositionRisk(position, instrument, feeRate, slippageRate) {
+  if (
+    !position || typeof position !== "object" ||
+    !Number.isFinite(feeRate) || feeRate < 0 ||
+    !Number.isFinite(slippageRate) || slippageRate < 0 ||
+    !["OPEN_LONG", "OPEN_SHORT"].includes(position.action)
+  ) {
+    return { ok: false, error: "Некорректные параметры пересчёта риска существующей позиции" };
+  }
+
   const contracts = Number(position.contracts);
   const contractValue = Number(instrument?.contractValue ?? position.contractValue);
   const referenceEntryPrice = Number(position.referenceEntryPrice ?? position.entryPrice);
   const entryExecutionPrice = Number(position.entryPrice);
   const stopLoss = Number(position.stopLoss);
   const action = position.action;
-  const stopExecutionPrice = getExecutionPrices(stopLoss, action, false, slippageRate);
-  if (![contracts, contractValue, referenceEntryPrice, entryExecutionPrice, stopLoss, stopExecutionPrice].every(Number.isFinite) ||
-      contracts <= 0 || contractValue <= 0 || referenceEntryPrice <= 0 || entryExecutionPrice <= 0 || stopLoss <= 0 ||
-      !["OPEN_LONG", "OPEN_SHORT"].includes(action)) {
+  if (
+    ![contracts, contractValue, referenceEntryPrice, entryExecutionPrice, stopLoss].every(Number.isFinite) ||
+    contracts <= 0 || contractValue <= 0 || referenceEntryPrice <= 0 || entryExecutionPrice <= 0 || stopLoss <= 0
+  ) {
     return { ok: false, error: "Нельзя безопасно пересчитать риск существующей позиции" };
+  }
+
+  const stopExecutionPrice = getExecutionPrices(stopLoss, action, false, slippageRate);
+  if (!Number.isFinite(stopExecutionPrice) || stopExecutionPrice <= 0) {
+    return { ok: false, error: "Некорректная цена исполнения Stop Loss при пересчёте риска" };
   }
   const riskPerContract =
     Math.abs(referenceEntryPrice - stopLoss) * contractValue +
@@ -1454,7 +1495,7 @@ function calculateExistingPositionRisk(position, instrument, feeRate, slippageRa
     Math.abs(stopExecutionPrice - stopLoss) * contractValue +
     (entryExecutionPrice + stopExecutionPrice) * contractValue * feeRate;
   const actualRisk = contracts * riskPerContract;
-  if (!Number.isFinite(actualRisk) || actualRisk <= 0) {
+  if (!Number.isFinite(riskPerContract) || riskPerContract <= 0 || !Number.isFinite(actualRisk) || actualRisk <= 0) {
     return { ok: false, error: "Некорректный пересчитанный риск существующей позиции" };
   }
   return { ok: true, actualRisk };
@@ -1530,8 +1571,41 @@ function evaluatePaperRiskAdmission({
   symbol, action, activePositions, correlationSnapshot, config,
   instrument, entry, stopLoss, balance
 }) {
-  if (!Array.isArray(activePositions) || !config || !Number.isFinite(balance) || balance < 0) {
-    return { ok: false, error: "Некорректные входные данные риск-менеджера" };
+  if (
+    typeof symbol !== "string" || !SYMBOLS.includes(symbol) ||
+    !["OPEN_LONG", "OPEN_SHORT"].includes(action) ||
+    !Array.isArray(activePositions) || !config ||
+    !Number.isFinite(balance) || balance < 0 ||
+    !Number.isInteger(config.maxOpenPositions) || config.maxOpenPositions < 1 ||
+    !Number.isInteger(config.maxPositionsPerSymbol) || config.maxPositionsPerSymbol < 1 ||
+    ![config.riskPerTrade, config.maxRiskPerSymbol, config.maxTotalRisk, config.maxCorrelatedRisk, config.leverage]
+      .every(value => Number.isFinite(value) && value > 0) ||
+    !Number.isFinite(config.correlationThreshold) || config.correlationThreshold < 0 || config.correlationThreshold > 1 ||
+    !Number.isFinite(config.feeRate) || config.feeRate < 0 ||
+    !Number.isFinite(config.slippageRate) || config.slippageRate < 0
+  ) {
+    return { ok: false, error: "Некорректные входные данные или конфигурация риск-менеджера" };
+  }
+
+  let currentRisk = 0;
+  let usedMargin = 0;
+  for (const position of activePositions) {
+    if (
+      !position || typeof position.symbol !== "string" || !SYMBOLS.includes(position.symbol) ||
+      !["OPEN_LONG", "OPEN_SHORT"].includes(position.action)
+    ) {
+      return { ok: false, error: "Обнаружена некорректная открытая позиция; новый вход запрещён" };
+    }
+    const positionRisk = Number(position.actualRisk);
+    const positionMargin = Number(position.requiredMargin);
+    if (!Number.isFinite(positionRisk) || positionRisk <= 0 || !Number.isFinite(positionMargin) || positionMargin <= 0) {
+      return { ok: false, error: "Не подтверждены риск или маржа открытой позиции " + position.symbol + "; новый вход запрещён" };
+    }
+    currentRisk += positionRisk;
+    usedMargin += positionMargin;
+    if (!Number.isFinite(currentRisk) || !Number.isFinite(usedMargin)) {
+      return { ok: false, error: "Переполнение совокупного риска или использованной маржи" };
+    }
   }
 
   const symbolPositions = activePositions.filter(position => position.symbol === symbol);
@@ -1545,8 +1619,7 @@ function evaluatePaperRiskAdmission({
     return { ok: false, error: "Запрещено открывать встречную позицию по уже занятому инструменту" };
   }
 
-  const currentRisk = activePositions.reduce((sum, position) => sum + Number(position.actualRisk || 0), 0);
-  const symbolRisk = symbolPositions.reduce((sum, position) => sum + Number(position.actualRisk || 0), 0);
+  const symbolRisk = symbolPositions.reduce((sum, position) => sum + Number(position.actualRisk), 0);
   const correlationRisk = getCorrelationRisk(
     symbol, activePositions, correlationSnapshot, config.correlationThreshold
   );
@@ -1567,11 +1640,18 @@ function evaluatePaperRiskAdmission({
     config.feeRate, config.slippageRate
   );
   if (!size.ok) return { ok: false, error: size.error };
+  if (
+    !Number.isFinite(size.actualRisk) || size.actualRisk <= 0 ||
+    !Number.isFinite(size.requiredMargin) || size.requiredMargin <= 0 ||
+    !Number.isFinite(size.contracts) || size.contracts <= 0
+  ) {
+    return { ok: false, error: "Расчёт размера позиции вернул некорректный риск, маржу или количество контрактов" };
+  }
 
   if (correlationRisk.correlatedRisk + size.actualRisk > config.maxCorrelatedRisk + 1e-8) {
     return {
       ok: false,
-      error: `Превышен лимит коррелирующего риска ${config.maxCorrelatedRisk} USDT; связанные позиции: ${correlationRisk.correlatedSymbols.map(item => item.symbol).join(", ")}`
+      error: "Превышен лимит коррелирующего риска " + config.maxCorrelatedRisk + " USDT; связанные позиции: " + correlationRisk.correlatedSymbols.map(item => item.symbol).join(", ")
     };
   }
   if (
@@ -1581,9 +1661,6 @@ function evaluatePaperRiskAdmission({
     return { ok: false, error: "Расчётный риск превышает установленный лимит" };
   }
 
-  const usedMargin = activePositions.reduce(
-    (sum, position) => sum + Number(position.requiredMargin || 0), 0
-  );
   if (usedMargin + size.requiredMargin > balance) {
     return { ok: false, error: "Недостаточно виртуальной маржи" };
   }
@@ -1670,21 +1747,24 @@ async function processPendingSignals(env, lock) {
 
   const rawState = await env.TRADER_KV.get("paper:state");
   const rawInstruments = await env.TRADER_KV.get("paper:instruments");
-
   if (!rawState || !rawInstruments) {
     throw new Error("Не найдены данные виртуального счёта");
   }
 
   const state = JSON.parse(rawState);
   const instruments = JSON.parse(rawInstruments);
-    const now = Date.now();
+  const now = Date.now();
 
-  if (
-    state.mode !== "DEMO ONLY" ||
-    state.executionEnabled !== false
-  ) {
+  if (state.mode !== "DEMO ONLY" || state.executionEnabled !== false) {
     throw new Error("Обработка разрешена только в DEMO ONLY");
   }
+  if (!Array.isArray(instruments)) {
+    throw new Error("Спецификации контрактов имеют некорректный формат");
+  }
+  if (!Number.isFinite(Number(state.balance)) || Number(state.balance) < 0) {
+    throw new Error("Баланс виртуального счёта некорректен; очередь сигналов не обработана");
+  }
+  state.balance = Number(state.balance);
 
   const maxOpenPositions = Number(state.maxOpenPositions);
   const maxPositionsPerSymbol = Number(state.maxPositionsPerSymbol);
@@ -1720,47 +1800,29 @@ async function processPendingSignals(env, lock) {
     throw new Error("Структура виртуального счёта повреждена; обработка остановлена без изменения истории");
   }
 
-  const pending = state.pendingSignals.filter(
-    signal => signal.status === "PENDING"
-  );
-
+  const pending = state.pendingSignals.filter(signal => signal.status === "PENDING");
   const symbols = [...new Set(pending.map(signal => signal.symbol))];
   const results = [];
 
   for (const symbol of symbols) {
     if (!SYMBOLS.includes(symbol)) {
-      results.push({
-        symbol,
-        ok: false,
-        error: "Инструмент отсутствует в разрешённом списке"
-      });
+      results.push({ symbol, ok: false, error: "Инструмент отсутствует в разрешённом списке" });
       continue;
     }
 
     const market = await getCandles(symbol);
-
     if (!market.ok) {
-      results.push({
-        symbol,
-        ok: false,
-        error: market.error
-      });
+      results.push({ symbol, ok: false, error: market.error });
       continue;
     }
 
     const instrument = instruments.find(item => item.symbol === symbol);
-
     if (!instrument) {
-      results.push({
-        symbol,
-        ok: false,
-        error: "Спецификация контракта не найдена"
-      });
+      results.push({ symbol, ok: false, error: "Спецификация контракта не найдена" });
       continue;
     }
 
     const signals = pending.filter(signal => signal.symbol === symbol);
-
     for (const signal of signals) {
       const expiryCheck = evaluatePendingSignalExpiry(signal, now);
       const lastProcessed = signal.lastProcessedCandleTime
@@ -1769,78 +1831,42 @@ async function processPendingSignals(env, lock) {
 
       if (!expiryCheck.ok || !Number.isFinite(lastProcessed)) {
         signal.status = "REJECTED";
-        signal.rejectReason = !expiryCheck.ok
-          ? expiryCheck.error
-          : "Некорректное время последней обработанной свечи";
-        results.push({
-          symbol,
-          signalId: signal.id,
-          status: "REJECTED",
-          reason: signal.rejectReason
-        });
+        signal.rejectReason = !expiryCheck.ok ? expiryCheck.error : "Некорректное время последней обработанной свечи";
+        results.push({ symbol, signalId: signal.id, status: "REJECTED", reason: signal.rejectReason });
         continue;
       }
 
       const eligibleTime = expiryCheck.eligibleTime;
-
-      // Fail closed: не открываем сделку задним числом после окончания окна.
       if (expiryCheck.expired) {
         signal.status = "EXPIRED";
         signal.expiredAt = expiryCheck.expiredAt;
-        signal.rejectReason =
-          "Окно входа пропущено: сигнал не был обработан вовремя";
-        results.push({
-          symbol,
-          signalId: signal.id,
-          status: "EXPIRED",
-          reason: signal.rejectReason
-        });
+        signal.rejectReason = "Окно входа пропущено: сигнал не был обработан вовремя";
+        results.push({ symbol, signalId: signal.id, status: "EXPIRED", reason: signal.rejectReason });
         continue;
       }
 
       const candles = market.candles.filter(candle => {
         const candleTime = Date.parse(candle.time);
         const candleCloseTime = candleTime + 300000;
-
-        return (
-          candleTime >= eligibleTime &&
-          candleTime > lastProcessed &&
-          candleCloseTime <= now
-        );
+        return candleTime >= eligibleTime && candleTime > lastProcessed && candleCloseTime <= now;
       });
 
       let opened = false;
-
       for (const candle of candles) {
-        signal.eligibleCandlesProcessed =
-          (signal.eligibleCandlesProcessed || 0) + 1;
-
+        signal.eligibleCandlesProcessed = (signal.eligibleCandlesProcessed || 0) + 1;
         signal.lastProcessedCandleTime = candle.time;
 
-        const entryTouched =
-          candle.low <= signal.entry &&
-          candle.high >= signal.entry;
-
+        const entryTouched = candle.low <= signal.entry && candle.high >= signal.entry;
         if (entryTouched) {
-          const activePositions = state.openPositions.filter(
-            position => position.status === "OPEN"
-          );
+          const activePositions = state.openPositions.filter(position => position.status === "OPEN");
           const admission = evaluatePaperRiskAdmission({
             symbol,
             action: signal.action,
             activePositions,
             correlationSnapshot: state.latestCorrelation,
             config: {
-              maxOpenPositions,
-              maxPositionsPerSymbol,
-              riskPerTrade,
-              maxRiskPerSymbol,
-              maxTotalRisk,
-              maxCorrelatedRisk,
-              correlationThreshold,
-              leverage,
-              feeRate,
-              slippageRate
+              maxOpenPositions, maxPositionsPerSymbol, riskPerTrade, maxRiskPerSymbol,
+              maxTotalRisk, maxCorrelatedRisk, correlationThreshold, leverage, feeRate, slippageRate
             },
             instrument,
             entry: signal.entry,
@@ -1853,8 +1879,8 @@ async function processPendingSignals(env, lock) {
             signal.rejectReason = admission.error;
             break;
           }
-          const size = admission.size;
 
+          const size = admission.size;
           const position = {
             id: crypto.randomUUID(),
             signalId: signal.id,
@@ -1882,9 +1908,7 @@ async function processPendingSignals(env, lock) {
             requiredMargin: size.requiredMargin,
             leverage,
             entryCandleTime: candle.time,
-            openedAt: new Date(
-              Date.parse(candle.time) + 300000
-            ).toISOString(),
+            openedAt: new Date(Date.parse(candle.time) + 300000).toISOString(),
             lastProcessedCandleTime: candle.time,
             pnlAccounting: "NET_AFTER_FEES_SLIPPAGE_FUNDING",
             costsIncluded: false,
@@ -1896,32 +1920,28 @@ async function processPendingSignals(env, lock) {
           const stopTouched = signal.action === "OPEN_SHORT"
             ? candle.high >= signal.stopLoss
             : candle.low <= signal.stopLoss;
-
           const targetTouched = signal.action === "OPEN_SHORT"
             ? candle.low <= signal.takeProfit
             : candle.high >= signal.takeProfit;
 
           if (stopTouched || targetTouched) {
             // Если одна свеча задела SL и TP, выбираем консервативный SL.
-            const exitPrice = stopTouched
-              ? signal.stopLoss
-              : signal.takeProfit;
-
+            const exitReferencePrice = stopTouched ? signal.stopLoss : signal.takeProfit;
+            const exitReason = stopTouched ? "STOP_LOSS" : "TAKE_PROFIT";
             try {
-              const closeResult = await closePaperPosition(
-                position,
-                exitPrice,
-                stopTouched ? "STOP_LOSS" : "TAKE_PROFIT",
-                candle.time,
-                instrument
-              );
+              const closeResult = await closePaperPosition(position, exitReferencePrice, exitReason, candle.time, instrument);
               state.balance += closeResult.netPnl;
-              state.closedPositions.push(position);
+              if (!state.closedPositions.some(item => item.id === position.id)) {
+                state.closedPositions.push(position);
+              }
               signal.status = "CLOSED";
             } catch (error) {
-              signal.status = "REJECTED";
-              signal.rejectReason = "Не удалось безопасно учесть расходы при немедленном закрытии: " + String(error);
-              break;
+              // Не теряем позицию: фиксируем намерение закрыть её и повторяем позже.
+              position.pendingExit = { exitReferencePrice, exitReason, candleTime: candle.time };
+              position.lastExitError = String(error);
+              state.openPositions.push(position);
+              signal.status = "OPEN";
+              signal.rejectReason = "Закрытие отложено до подтверждения всех расходов: " + String(error);
             }
           } else {
             state.openPositions.push(position);
@@ -1931,25 +1951,13 @@ async function processPendingSignals(env, lock) {
           signal.positionId = position.id;
           signal.openedAt = position.openedAt;
           opened = true;
-
-          results.push({
-            symbol,
-            signalId: signal.id,
-            status: signal.status,
-            position
-          });
-
+          results.push({ symbol, signalId: signal.id, status: signal.status, position });
           break;
         }
 
-        if (
-          signal.eligibleCandlesProcessed >=
-          getSignalExpiryConfig(signal).value
-        ) {
+        if (signal.eligibleCandlesProcessed >= getSignalExpiryConfig(signal).value) {
           signal.status = "EXPIRED";
-          signal.expiredAt = new Date(
-            Date.parse(candle.time) + 300000
-          ).toISOString();
+          signal.expiredAt = new Date(Date.parse(candle.time) + 300000).toISOString();
           break;
         }
       }
@@ -1966,169 +1974,181 @@ async function processPendingSignals(env, lock) {
   }
 
   state.lastUpdatedAt = new Date().toISOString();
-
   await lock.put("paper:state", JSON.stringify(state));
-
-  return {
-    ok: true,
-    mode: "DEMO ONLY",
-    executionEnabled: false,
-    processed: results
-  };
+  return { ok: true, mode: "DEMO ONLY", executionEnabled: false, processed: results };
 }
 
 async function processOpenPositions(env, lock) {
-  if (!env.TRADER_KV) {
-    throw new Error("TRADER_KV не подключён");
-  }
-
+  if (!env.TRADER_KV) throw new Error("TRADER_KV не подключён");
   const rawState = await env.TRADER_KV.get("paper:state");
-
-  if (!rawState) {
-    throw new Error("Не найдено состояние виртуального счёта");
-  }
+  if (!rawState) throw new Error("Не найдено состояние виртуального счёта");
 
   const state = JSON.parse(rawState);
-
-  if (
-    state.mode !== "DEMO ONLY" ||
-    state.executionEnabled !== false
-  ) {
+  if (state.mode !== "DEMO ONLY" || state.executionEnabled !== false) {
     throw new Error("Мониторинг разрешён только в DEMO ONLY");
   }
-
-  if (
-    !Array.isArray(state.openPositions) ||
-    !Array.isArray(state.closedPositions)
-  ) {
+  if (!Array.isArray(state.openPositions) || !Array.isArray(state.closedPositions)) {
     throw new Error("Структура позиций повреждена; обработка остановлена без изменения истории");
   }
+  if (!Number.isFinite(Number(state.balance)) || Number(state.balance) < 0) {
+    throw new Error("Баланс виртуального счёта некорректен; закрытие позиций остановлено");
+  }
+  state.balance = Number(state.balance);
+  if (!Array.isArray(state.pendingSignals)) state.pendingSignals = [];
 
-  const activePositions = state.openPositions.filter(
-    position => position.status === "OPEN"
-  );
-
-  const symbols = [
-    ...new Set(activePositions.map(position => position.symbol))
-  ];
-
+  const activePositions = state.openPositions.filter(position => position.status === "OPEN");
+  const symbols = [...new Set(activePositions.map(position => position.symbol))];
   const results = [];
 
   for (const symbol of symbols) {
-    const market = await getCandles(symbol);
+    const positions = activePositions.filter(position => position.symbol === symbol && position.status === "OPEN");
+    const positionsNeedingCandles = [];
 
+    // Сначала повторяем ранее отложенные закрытия. Новые свечи для такой позиции
+    // не обрабатываются, пока финансовый расчёт старого выхода не завершён.
+    for (const position of positions) {
+      if (!position.pendingExit) {
+        positionsNeedingCandles.push(position);
+        continue;
+      }
+
+      const pendingExit = position.pendingExit;
+      if (
+        !Number.isFinite(Number(pendingExit.exitReferencePrice)) || Number(pendingExit.exitReferencePrice) <= 0 ||
+        !["STOP_LOSS", "TAKE_PROFIT"].includes(pendingExit.exitReason) ||
+        !Number.isFinite(Date.parse(pendingExit.candleTime))
+      ) {
+        results.push({ symbol, positionId: position.id, status: "OPEN", ok: false, error: "Повреждены параметры отложенного закрытия; позиция оставлена открытой" });
+        continue;
+      }
+
+      try {
+        const closeResult = await closePaperPosition(
+          position,
+          Number(pendingExit.exitReferencePrice),
+          pendingExit.exitReason,
+          pendingExit.candleTime,
+          { contractValue: position.contractValue }
+        );
+        state.balance += closeResult.netPnl;
+        delete position.pendingExit;
+        delete position.lastExitError;
+        if (!state.closedPositions.some(item => item.id === position.id)) {
+          state.closedPositions.push(position);
+        }
+        state.openPositions = state.openPositions.filter(item => item.id !== position.id);
+        const linkedSignal = state.pendingSignals.find(signal => signal.id === position.signalId);
+        if (linkedSignal) {
+          linkedSignal.status = "CLOSED";
+          linkedSignal.closedAt = position.closedAt;
+        }
+        results.push({
+          symbol, positionId: position.id, status: "CLOSED",
+          exitReason: position.exitReason, exitPrice: position.exitPrice,
+          grossPnl: closeResult.grossPnl, netPnl: closeResult.netPnl,
+          totalFees: closeResult.totalFees, totalSlippage: closeResult.totalSlippage,
+          fundingPnl: closeResult.fundingPnl, totalCosts: closeResult.totalCosts,
+          balance: state.balance, retriedPendingExit: true
+        });
+      } catch (error) {
+        position.lastExitError = String(error);
+        results.push({
+          symbol, positionId: position.id, status: "OPEN", ok: false,
+          error: "Повторное закрытие отложено: не удалось подтвердить все расходы: " + String(error),
+          pendingExit: true
+        });
+      }
+    }
+
+    if (!positionsNeedingCandles.length) continue;
+
+    const market = await getCandles(symbol);
     if (!market.ok) {
-      results.push({
-        symbol,
-        ok: false,
-        error: market.error
-      });
+      results.push({ symbol, ok: false, error: market.error });
       continue;
     }
 
-    const positions = activePositions.filter(
-      position => position.symbol === symbol
-    );
-
-    for (const position of positions) {
+    for (const position of positionsNeedingCandles) {
+      if (position.status !== "OPEN") continue;
       const candleWindow = getUnprocessedPositionCandles(
         market.candles,
         position.lastProcessedCandleTime || position.entryCandleTime
       );
-
       if (!candleWindow.ok) {
-        results.push({
-          symbol,
-          positionId: position.id,
-          ok: false,
-          error: candleWindow.error
-        });
+        results.push({ symbol, positionId: position.id, ok: false, error: candleWindow.error });
         continue;
       }
 
-      const candles = candleWindow.candles;
-
       let closed = false;
-
-      for (const candle of candles) {
+      for (const candle of candleWindow.candles) {
         const exitDecision = evaluatePositionExit(position, candle);
-
         if (!exitDecision.ok) {
-          results.push({
-            symbol,
-            positionId: position.id,
-            ok: false,
-            error: exitDecision.error
-          });
+          results.push({ symbol, positionId: position.id, ok: false, error: exitDecision.error });
           break;
         }
 
         if (exitDecision.shouldClose) {
-          const exitPrice = exitDecision.exitReferencePrice;
-
+          const pendingExit = {
+            exitReferencePrice: exitDecision.exitReferencePrice,
+            exitReason: exitDecision.exitReason,
+            candleTime: candle.time
+          };
+          // Сохраняем параметры до попытки финансового закрытия.
+          position.pendingExit = pendingExit;
           try {
             const closeResult = await closePaperPosition(
               position,
-              exitPrice,
-              exitDecision.exitReason,
-              candle.time,
+              pendingExit.exitReferencePrice,
+              pendingExit.exitReason,
+              pendingExit.candleTime,
               { contractValue: position.contractValue }
             );
-
             state.balance += closeResult.netPnl;
+            delete position.pendingExit;
+            delete position.lastExitError;
             if (!state.closedPositions.some(item => item.id === position.id)) {
               state.closedPositions.push(position);
             }
             state.openPositions = state.openPositions.filter(item => item.id !== position.id);
+            const linkedSignal = state.pendingSignals.find(signal => signal.id === position.signalId);
+            if (linkedSignal) {
+              linkedSignal.status = "CLOSED";
+              linkedSignal.closedAt = position.closedAt;
+            }
             closed = true;
-
             results.push({
-              symbol,
-              positionId: position.id,
-              status: "CLOSED",
-              exitReason: position.exitReason,
-              exitPrice: position.exitPrice,
-              grossPnl: closeResult.grossPnl,
-              netPnl: closeResult.netPnl,
-              totalFees: closeResult.totalFees,
-              totalSlippage: closeResult.totalSlippage,
-              fundingPnl: closeResult.fundingPnl,
-              totalCosts: closeResult.totalCosts,
+              symbol, positionId: position.id, status: "CLOSED",
+              exitReason: position.exitReason, exitPrice: position.exitPrice,
+              grossPnl: closeResult.grossPnl, netPnl: closeResult.netPnl,
+              totalFees: closeResult.totalFees, totalSlippage: closeResult.totalSlippage,
+              fundingPnl: closeResult.fundingPnl, totalCosts: closeResult.totalCosts,
               balance: state.balance
             });
           } catch (error) {
+            position.lastExitError = String(error);
             results.push({
-              symbol,
-              positionId: position.id,
-              status: "OPEN",
-              ok: false,
-              error: "Закрытие отложено: не удалось подтвердить все расходы: " + String(error)
+              symbol, positionId: position.id, status: "OPEN", ok: false,
+              error: "Закрытие отложено: не удалось подтвердить все расходы: " + String(error),
+              pendingExit: true
             });
-            break;
           }
-
           break;
-        } else {
-          position.lastProcessedCandleTime = candle.time;
         }
+
+        position.lastProcessedCandleTime = candle.time;
       }
 
-      if (!closed && position.status === "OPEN") {
+      if (!closed && position.status === "OPEN" && !position.pendingExit) {
         results.push({
-          symbol,
-          positionId: position.id,
-          status: "OPEN",
-          lastProcessedCandleTime:
-            position.lastProcessedCandleTime
+          symbol, positionId: position.id, status: "OPEN",
+          lastProcessedCandleTime: position.lastProcessedCandleTime
         });
       }
     }
   }
 
   state.lastUpdatedAt = new Date().toISOString();
-
   await lock.put("paper:state", JSON.stringify(state));
-
   return {
     ok: true,
     mode: "DEMO ONLY",
@@ -2137,6 +2157,7 @@ async function processOpenPositions(env, lock) {
     results
   };
 }
+
 function getEligibleAfterCandleTime(signal) {
   if (signal.eligibleAfterCandleTime) {
     return signal.eligibleAfterCandleTime;
