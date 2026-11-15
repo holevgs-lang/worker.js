@@ -11,7 +11,7 @@ const SYMBOLS = [
   "STRK-USDT-SWAP"
 ];
 
-const PAPER_CONFIG = {
+const PAPER_CONFIG = Object.freeze({
   initialCapital: 500,
   leverage: 2,
   maxOpenPositions: 12,
@@ -23,7 +23,7 @@ const PAPER_CONFIG = {
   correlationThreshold: 0.75,
   feeRate: 0.0005,
   slippageRate: 0.0002
-};
+});
 
 const CORRELATION_WINDOW = 50;
 const CORRELATION_MIN_SAMPLES = 20;
@@ -1576,11 +1576,14 @@ function evaluatePaperRiskAdmission({
     !["OPEN_LONG", "OPEN_SHORT"].includes(action) ||
     !Array.isArray(activePositions) || !config ||
     !Number.isFinite(balance) || balance < 0 ||
-    !Number.isInteger(config.maxOpenPositions) || config.maxOpenPositions < 1 ||
-    !Number.isInteger(config.maxPositionsPerSymbol) || config.maxPositionsPerSymbol < 1 ||
-    ![config.riskPerTrade, config.maxRiskPerSymbol, config.maxTotalRisk, config.maxCorrelatedRisk, config.leverage]
-      .every(value => Number.isFinite(value) && value > 0) ||
-    !Number.isFinite(config.correlationThreshold) || config.correlationThreshold < 0 || config.correlationThreshold > 1 ||
+    !Number.isInteger(config.maxOpenPositions) || config.maxOpenPositions !== PAPER_CONFIG.maxOpenPositions ||
+    !Number.isInteger(config.maxPositionsPerSymbol) || config.maxPositionsPerSymbol !== PAPER_CONFIG.maxPositionsPerSymbol ||
+    config.riskPerTrade !== PAPER_CONFIG.riskPerTrade ||
+    config.maxRiskPerSymbol !== PAPER_CONFIG.maxRiskPerSymbol ||
+    config.maxTotalRisk !== PAPER_CONFIG.maxTotalRisk ||
+    config.maxCorrelatedRisk !== PAPER_CONFIG.maxCorrelatedRisk ||
+    config.leverage !== PAPER_CONFIG.leverage ||
+    config.correlationThreshold !== PAPER_CONFIG.correlationThreshold ||
     !Number.isFinite(config.feeRate) || config.feeRate < 0 ||
     !Number.isFinite(config.slippageRate) || config.slippageRate < 0
   ) {
@@ -1766,31 +1769,28 @@ async function processPendingSignals(env, lock) {
   }
   state.balance = Number(state.balance);
 
-  const maxOpenPositions = Number(state.maxOpenPositions);
-  const maxPositionsPerSymbol = Number(state.maxPositionsPerSymbol);
-  const riskPerTrade = Number(state.riskPerTrade);
-  const maxRiskPerSymbol = Number(state.maxRiskPerSymbol);
-  const maxTotalRisk = Number(state.maxTotalRisk);
-  const maxCorrelatedRisk = Number(state.maxCorrelatedRisk ?? PAPER_CONFIG.maxCorrelatedRisk);
-  const correlationThreshold = Number(state.correlationThreshold ?? PAPER_CONFIG.correlationThreshold);
-  const feeRate = Number(state.feeRate ?? PAPER_CONFIG.feeRate);
-  const slippageRate = Number(state.slippageRate ?? PAPER_CONFIG.slippageRate);
-  const leverage = Number(state.leverage);
-
-  if (
-    !Number.isInteger(maxOpenPositions) || maxOpenPositions < 1 ||
-    !Number.isInteger(maxPositionsPerSymbol) || maxPositionsPerSymbol < 1 ||
-    !Number.isFinite(riskPerTrade) || riskPerTrade <= 0 ||
-    !Number.isFinite(maxRiskPerSymbol) || maxRiskPerSymbol <= 0 ||
-    !Number.isFinite(maxTotalRisk) || maxTotalRisk <= 0 ||
-    !Number.isFinite(maxCorrelatedRisk) || maxCorrelatedRisk <= 0 ||
-    !Number.isFinite(correlationThreshold) || correlationThreshold < 0 || correlationThreshold > 1 ||
-    !Number.isFinite(feeRate) || feeRate < 0 ||
-    !Number.isFinite(slippageRate) || slippageRate < 0 ||
-    !Number.isFinite(leverage) || leverage <= 0
-  ) {
-    throw new Error("Конфигурация риска виртуального счёта некорректна");
+  // Жёсткие лимиты берутся только из PAPER_CONFIG, а не из изменяемого KV-состояния.
+  // Несовпадение состояния блокирует новые входы; значения и баланс автоматически не переписываются.
+  const fixedLimitKeys = [
+    "initialCapital", "leverage", "maxOpenPositions", "maxPositionsPerSymbol",
+    "riskPerTrade", "maxRiskPerSymbol", "maxTotalRisk", "maxCorrelatedRisk",
+    "correlationThreshold"
+  ];
+  for (const key of fixedLimitKeys) {
+    if (Number(state[key]) !== PAPER_CONFIG[key]) {
+      throw new Error("Настройка " + key + " в KV не совпадает с жёстким лимитом кода; новые входы заблокированы");
+    }
   }
+  const maxOpenPositions = PAPER_CONFIG.maxOpenPositions;
+  const maxPositionsPerSymbol = PAPER_CONFIG.maxPositionsPerSymbol;
+  const riskPerTrade = PAPER_CONFIG.riskPerTrade;
+  const maxRiskPerSymbol = PAPER_CONFIG.maxRiskPerSymbol;
+  const maxTotalRisk = PAPER_CONFIG.maxTotalRisk;
+  const maxCorrelatedRisk = PAPER_CONFIG.maxCorrelatedRisk;
+  const correlationThreshold = PAPER_CONFIG.correlationThreshold;
+  const feeRate = PAPER_CONFIG.feeRate;
+  const slippageRate = PAPER_CONFIG.slippageRate;
+  const leverage = PAPER_CONFIG.leverage;
 
   if (
     !Array.isArray(state.pendingSignals) ||
