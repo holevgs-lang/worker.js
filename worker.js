@@ -2,6 +2,8 @@
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 
 // worker.js
+var __defProp2 = Object.defineProperty;
+var __name2 = /* @__PURE__ */ __name((target, value) => __defProp2(target, "name", { value, configurable: true }), "__name");
 var BASE_URL = "https://eea.okx.com";
 var OKX_DEMO_HEADERS = {
   "x-simulated-trading": "1"
@@ -18,9 +20,9 @@ var SYMBOLS = [
 var PAPER_CONFIG = Object.freeze({
   initialCapital: 500,
   leverage: 2,
-  maxOpenPositions: 12,
+  maxOpenPositions: 20,
   maxPositionsPerSymbol: 2,
-  riskPerTrade: 5,
+  riskPerTrade: 10,
   maxRiskPerSymbol: 10,
   maxTotalRisk: 60,
   maxCorrelatedRisk: 15,
@@ -33,7 +35,7 @@ var CORRELATION_MIN_SAMPLES = 20;
 var CORRELATION_MAX_AGE_MS = 10 * 60 * 1e3;
 var PAPER_LOCK_TTL_MS = 5 * 60 * 1e3;
 var PAPER_LOCK_RENEW_INTERVAL_MS = 60 * 1e3;
-var sleep = /* @__PURE__ */ __name((ms) => new Promise((resolve) => setTimeout(resolve, ms)), "sleep");
+var sleep = /* @__PURE__ */ __name2((ms) => new Promise((resolve) => setTimeout(resolve, ms)), "sleep");
 function json(data, status = 200) {
   return new Response(JSON.stringify(data, null, 2), {
     status,
@@ -43,6 +45,7 @@ function json(data, status = 200) {
   });
 }
 __name(json, "json");
+__name2(json, "json");
 function controlAuthError(request, env, requiredMethod) {
   if (request.method !== requiredMethod) {
     return json({
@@ -65,12 +68,13 @@ function controlAuthError(request, env, requiredMethod) {
   return null;
 }
 __name(controlAuthError, "controlAuthError");
-async function getCandles(symbol) {
+__name2(controlAuthError, "controlAuthError");
+async function getCandles(symbol2) {
   const endpoint = new URL(
     "/api/v5/market/candles",
     BASE_URL
   );
-  endpoint.searchParams.set("instId", symbol);
+  endpoint.searchParams.set("instId", symbol2);
   endpoint.searchParams.set("bar", "5m");
   endpoint.searchParams.set("limit", "100");
   let lastError = null;
@@ -97,6 +101,7 @@ async function getCandles(symbol) {
           error
         );
         requestError.rateLimited = response.status === 429 || data.code === "50011";
+        requestError.rateLimited = requestError.rateLimited;
         const retryAfter = Number(
           response.headers.get("Retry-After")
         );
@@ -119,7 +124,7 @@ async function getCandles(symbol) {
         );
       }
       return {
-        symbol,
+        symbol: symbol2,
         ok: true,
         candlesCount: candles.length,
         latest: candles[candles.length - 1],
@@ -139,12 +144,13 @@ async function getCandles(symbol) {
     }
   }
   return {
-    symbol,
+    symbol: symbol2,
     ok: false,
     error: lastError
   };
 }
 __name(getCandles, "getCandles");
+__name2(getCandles, "getCandles");
 function ema(values, period) {
   if (values.length < period) return null;
   const multiplier = 2 / (period + 1);
@@ -155,6 +161,7 @@ function ema(values, period) {
   return result;
 }
 __name(ema, "ema");
+__name2(ema, "ema");
 function emaSeries(values, period) {
   const result = [];
   if (values.length < period) return result;
@@ -168,6 +175,7 @@ function emaSeries(values, period) {
   return result;
 }
 __name(emaSeries, "emaSeries");
+__name2(emaSeries, "emaSeries");
 function calculateIndicators(candles) {
   if (!Array.isArray(candles) || candles.length < 35) {
     throw new Error("\u041D\u0435\u0434\u043E\u0441\u0442\u0430\u0442\u043E\u0447\u043D\u043E \u0441\u0432\u0435\u0447\u0435\u0439");
@@ -212,8 +220,8 @@ function calculateIndicators(candles) {
     macdValues.push(shortValue - longValue);
   }
   const macd = macdValues[macdValues.length - 1];
-  const signal = ema(macdValues, 9);
-  const histogram = macd - signal;
+  const signal2 = ema(macdValues, 9);
+  const histogram = macd - signal2;
   const trueRanges = [];
   for (let i = 1; i < candles.length; i++) {
     trueRanges.push(Math.max(
@@ -235,7 +243,7 @@ function calculateIndicators(candles) {
     ema21,
     rsi,
     macd,
-    macdSignal: signal,
+    macdSignal: signal2,
     macdHistogram: histogram,
     atr,
     volume: currentVolume,
@@ -250,13 +258,14 @@ function calculateIndicators(candles) {
   return result;
 }
 __name(calculateIndicators, "calculateIndicators");
+__name2(calculateIndicators, "calculateIndicators");
 async function collectMarketData() {
   const marketData = [];
-  for (const symbol of SYMBOLS) {
-    const market = await getCandles(symbol);
+  for (const symbol2 of SYMBOLS) {
+    const market = await getCandles(symbol2);
     if (!market.ok) {
       marketData.push({
-        symbol,
+        symbol: symbol2,
         error: market.error
       });
       await sleep(1e4);
@@ -265,7 +274,7 @@ async function collectMarketData() {
     const indicators = calculateIndicators(market.candles);
     const lastCandle = market.latest;
     marketData.push({
-      symbol,
+      symbol: symbol2,
       // Время открытия последней закрытой свечи
       lastCandleTime: lastCandle.time,
       // OHLC последней закрытой свечи
@@ -287,6 +296,7 @@ async function collectMarketData() {
   return marketData;
 }
 __name(collectMarketData, "collectMarketData");
+__name2(collectMarketData, "collectMarketData");
 function extractAIJson(response) {
   let content = response;
   if (typeof content === "string") {
@@ -314,6 +324,7 @@ function extractAIJson(response) {
   return JSON.parse(text.slice(start, end + 1));
 }
 __name(extractAIJson, "extractAIJson");
+__name2(extractAIJson, "extractAIJson");
 function validateDecisions(parsed, marketData) {
   const errors = [];
   const warnings = [];
@@ -327,19 +338,20 @@ function validateDecisions(parsed, marketData) {
   if (parsed.decisions.length !== SYMBOLS.length) {
     errors.push("\u041A\u043E\u043B\u0438\u0447\u0435\u0441\u0442\u0432\u043E \u0440\u0435\u0448\u0435\u043D\u0438\u0439 \u043D\u0435 \u0440\u0430\u0432\u043D\u043E \u0448\u0435\u0441\u0442\u0438");
   }
-  for (const symbol of SYMBOLS) {
+  for (const symbol2 of SYMBOLS) {
     const matches = parsed.decisions.filter(
-      (d2) => d2 && d2.symbol === symbol
+      (d2) => d2 && d2.symbol === symbol2
     );
     if (matches.length !== 1) {
       errors.push(
-        symbol + ": \u043E\u0442\u0441\u0443\u0442\u0441\u0442\u0432\u0443\u0435\u0442 \u0440\u0435\u0448\u0435\u043D\u0438\u0435 \u0438\u043B\u0438 \u0435\u0441\u0442\u044C \u0434\u0443\u0431\u043B\u0438\u043A\u0430\u0442\u044B"
+        symbol2 + ": \u043E\u0442\u0441\u0443\u0442\u0441\u0442\u0432\u0443\u0435\u0442 \u0440\u0435\u0448\u0435\u043D\u0438\u0435 \u0438\u043B\u0438 \u0435\u0441\u0442\u044C \u0434\u0443\u0431\u043B\u0438\u043A\u0430\u0442\u044B"
       );
       continue;
     }
     const d = matches[0];
-    const market = marketData.find(
-      (item) => item.symbol === symbol
+    const market = (
+      /** @type {any} */
+      marketData.find((item) => item.symbol === symbol2)
     );
     if (!market || ![
       market.price,
@@ -353,22 +365,22 @@ function validateDecisions(parsed, marketData) {
       market.volumeRatio
     ].every(Number.isFinite)) {
       errors.push(
-        symbol + ": \u043E\u0442\u0441\u0443\u0442\u0441\u0442\u0432\u0443\u044E\u0442 \u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u044B\u0435 \u0440\u044B\u043D\u043E\u0447\u043D\u044B\u0435 \u0434\u0430\u043D\u043D\u044B\u0435"
+        symbol2 + ": \u043E\u0442\u0441\u0443\u0442\u0441\u0442\u0432\u0443\u044E\u0442 \u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u044B\u0435 \u0440\u044B\u043D\u043E\u0447\u043D\u044B\u0435 \u0434\u0430\u043D\u043D\u044B\u0435"
       );
       continue;
     }
     if (!["OPEN_LONG", "OPEN_SHORT", "HOLD"].includes(d.action)) {
-      errors.push(symbol + ": \u043D\u0435\u0434\u043E\u043F\u0443\u0441\u0442\u0438\u043C\u043E\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435");
+      errors.push(symbol2 + ": \u043D\u0435\u0434\u043E\u043F\u0443\u0441\u0442\u0438\u043C\u043E\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435");
       continue;
     }
     if (!Number.isInteger(d.confidence) || d.confidence < 0 || d.confidence > 100) {
       errors.push(
-        symbol + ": confidence \u0434\u043E\u043B\u0436\u0435\u043D \u0431\u044B\u0442\u044C \u0446\u0435\u043B\u044B\u043C \u0447\u0438\u0441\u043B\u043E\u043C \u043E\u0442 0 \u0434\u043E 100"
+        symbol2 + ": confidence \u0434\u043E\u043B\u0436\u0435\u043D \u0431\u044B\u0442\u044C \u0446\u0435\u043B\u044B\u043C \u0447\u0438\u0441\u043B\u043E\u043C \u043E\u0442 0 \u0434\u043E 100"
       );
       continue;
     }
     if (typeof d.reason !== "string" || !d.reason.trim()) {
-      errors.push(symbol + ": \u043E\u0442\u0441\u0443\u0442\u0441\u0442\u0432\u0443\u0435\u0442 \u043E\u0431\u044A\u044F\u0441\u043D\u0435\u043D\u0438\u0435 \u0440\u0435\u0448\u0435\u043D\u0438\u044F");
+      errors.push(symbol2 + ": \u043E\u0442\u0441\u0443\u0442\u0441\u0442\u0432\u0443\u0435\u0442 \u043E\u0431\u044A\u044F\u0441\u043D\u0435\u043D\u0438\u0435 \u0440\u0435\u0448\u0435\u043D\u0438\u044F");
       continue;
     }
     const reason = d.reason.toLowerCase();
@@ -447,12 +459,12 @@ function validateDecisions(parsed, marketData) {
     if (d.action === "HOLD") {
       if (d.entry !== null || d.stopLoss !== null || d.takeProfit !== null) {
         errors.push(
-          symbol + ": HOLD \u0434\u043E\u043B\u0436\u0435\u043D \u0438\u043C\u0435\u0442\u044C null \u0432 \u0446\u0435\u043D\u0430\u0445"
+          symbol2 + ": HOLD \u0434\u043E\u043B\u0436\u0435\u043D \u0438\u043C\u0435\u0442\u044C null \u0432 \u0446\u0435\u043D\u0430\u0445"
         );
       }
       if (factualProblems.length > 0) {
         warnings.push(
-          symbol + ": \u043E\u0448\u0438\u0431\u043A\u0430 \u0432 \u043E\u0431\u044A\u044F\u0441\u043D\u0435\u043D\u0438\u0438 HOLD. " + factualProblems.join("; ")
+          symbol2 + ": \u043E\u0448\u0438\u0431\u043A\u0430 \u0432 \u043E\u0431\u044A\u044F\u0441\u043D\u0435\u043D\u0438\u0438 HOLD. " + factualProblems.join("; ")
         );
       }
       continue;
@@ -463,11 +475,11 @@ function validateDecisions(parsed, marketData) {
       d.takeProfit
     ];
     if (!prices.every(Number.isFinite)) {
-      errors.push(symbol + ": \u043D\u0435\u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u044B\u0435 \u0446\u0435\u043D\u044B");
+      errors.push(symbol2 + ": \u043D\u0435\u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u044B\u0435 \u0446\u0435\u043D\u044B");
       continue;
     }
     if (d.entry <= 0 || d.stopLoss <= 0 || d.takeProfit <= 0) {
-      errors.push(symbol + ": \u043D\u0435\u0434\u043E\u043F\u0443\u0441\u0442\u0438\u043C\u044B\u0435 \u0446\u0435\u043D\u044B");
+      errors.push(symbol2 + ": \u043D\u0435\u0434\u043E\u043F\u0443\u0441\u0442\u0438\u043C\u044B\u0435 \u0446\u0435\u043D\u044B");
       continue;
     }
     const maxEntryDistance = Math.max(
@@ -476,12 +488,15 @@ function validateDecisions(parsed, marketData) {
     );
     if (Math.abs(d.entry - market.price) > maxEntryDistance) {
       errors.push(
-        symbol + ": \u0446\u0435\u043D\u0430 \u0432\u0445\u043E\u0434\u0430 \u0441\u043B\u0438\u0448\u043A\u043E\u043C \u0434\u0430\u043B\u0435\u043A\u043E \u043E\u0442 \u0440\u044B\u043D\u043A\u0430"
+        symbol2 + ": \u0446\u0435\u043D\u0430 \u0432\u0445\u043E\u0434\u0430 \u0441\u043B\u0438\u0448\u043A\u043E\u043C \u0434\u0430\u043B\u0435\u043A\u043E \u043E\u0442 \u0440\u044B\u043D\u043A\u0430"
       );
       continue;
     }
     let tradeProblems = factualProblems.slice();
     if (d.action === "OPEN_LONG") {
+      if (market.price <= market.ema21) {
+        tradeProblems.push("\u0426\u0435\u043D\u0430 \u043D\u0438\u0436\u0435 EMA21 (\u043D\u0435\u0442 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u0438\u044F \u0432\u043E\u0441\u0445\u043E\u0434\u044F\u0449\u0435\u0433\u043E \u0442\u0440\u0435\u043D\u0434\u0430)");
+      }
       if (d.stopLoss >= d.entry || d.takeProfit <= d.entry) {
         tradeProblems.push(
           "\u041D\u0435\u0432\u0435\u0440\u043D\u043E\u0435 \u0440\u0430\u0441\u043F\u043E\u043B\u043E\u0436\u0435\u043D\u0438\u0435 SL \u0438\u043B\u0438 TP \u0434\u043B\u044F LONG"
@@ -489,7 +504,7 @@ function validateDecisions(parsed, marketData) {
       }
       const risk = d.entry - d.stopLoss;
       const reward = d.takeProfit - d.entry;
-      if (risk > 0 && reward / risk < 1.2) {
+      if (typeof reward === "number" && typeof risk === "number" && risk > 0 && reward / risk < 1.5) {
         tradeProblems.push(
           "\u0421\u043E\u043E\u0442\u043D\u043E\u0448\u0435\u043D\u0438\u0435 \u043F\u0440\u0438\u0431\u044B\u043B\u0438 \u043A \u0440\u0438\u0441\u043A\u0443 \u043C\u0435\u043D\u044C\u0448\u0435 1.5"
         );
@@ -509,6 +524,9 @@ function validateDecisions(parsed, marketData) {
       }
     }
     if (d.action === "OPEN_SHORT") {
+      if (market.price >= market.ema21) {
+        tradeProblems.push("\u0426\u0435\u043D\u0430 \u0432\u044B\u0448\u0435 EMA21 (\u043D\u0435\u0442 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u0438\u044F \u043D\u0438\u0441\u0445\u043E\u0434\u044F\u0449\u0435\u0433\u043E \u0442\u0440\u0435\u043D\u0434\u0430)");
+      }
       if (d.stopLoss <= d.entry || d.takeProfit >= d.entry) {
         tradeProblems.push(
           "\u041D\u0435\u0432\u0435\u0440\u043D\u043E\u0435 \u0440\u0430\u0441\u043F\u043E\u043B\u043E\u0436\u0435\u043D\u0438\u0435 SL \u0438\u043B\u0438 TP \u0434\u043B\u044F SHORT"
@@ -516,7 +534,7 @@ function validateDecisions(parsed, marketData) {
       }
       const risk = d.stopLoss - d.entry;
       const reward = d.entry - d.takeProfit;
-      if (risk > 0 && reward / risk < 1.2) {
+      if (typeof reward === "number" && typeof risk === "number" && risk > 0 && reward / risk < 1.5) {
         tradeProblems.push(
           "\u0421\u043E\u043E\u0442\u043D\u043E\u0448\u0435\u043D\u0438\u0435 \u043F\u0440\u0438\u0431\u044B\u043B\u0438 \u043A \u0440\u0438\u0441\u043A\u0443 \u043C\u0435\u043D\u044C\u0448\u0435 1.5"
         );
@@ -537,7 +555,7 @@ function validateDecisions(parsed, marketData) {
     }
     if (tradeProblems.length > 0) {
       warnings.push(
-        symbol + ": \u0441\u0434\u0435\u043B\u043A\u0430 \u0437\u0430\u043C\u0435\u043D\u0435\u043D\u0430 \u043D\u0430 HOLD. " + tradeProblems.join("; ")
+        symbol2 + ": \u0441\u0434\u0435\u043B\u043A\u0430 \u0437\u0430\u043C\u0435\u043D\u0435\u043D\u0430 \u043D\u0430 HOLD. " + tradeProblems.join("; ")
       );
       d.action = "HOLD";
       d.entry = null;
@@ -554,6 +572,7 @@ function validateDecisions(parsed, marketData) {
   };
 }
 __name(validateDecisions, "validateDecisions");
+__name2(validateDecisions, "validateDecisions");
 async function withPaperLock(env, task) {
   if (!env.PAPER_LOCK) {
     throw new Error("Durable Object PAPER_LOCK \u043D\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0451\u043D");
@@ -613,6 +632,7 @@ async function withPaperLock(env, task) {
     }
   }
   __name(requestPaperLock, "requestPaperLock");
+  __name2(requestPaperLock, "requestPaperLock");
   const acquireData = await requestPaperLock(
     "/acquire",
     null,
@@ -652,7 +672,7 @@ async function withPaperLock(env, task) {
     }
   })();
   const lock = {
-    put: /* @__PURE__ */ __name(async (key, value) => {
+    put: /* @__PURE__ */ __name2(async (key, value) => {
       if (heartbeatError) {
         throw new Error(
           "\u0417\u0430\u043F\u0438\u0441\u044C \u0437\u0430\u043F\u0440\u0435\u0449\u0435\u043D\u0430: heartbeat \u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u043A\u0438 \u0437\u0430\u0432\u0435\u0440\u0448\u0438\u043B\u0441\u044F \u043E\u0448\u0438\u0431\u043A\u043E\u0439: " + String(heartbeatError)
@@ -717,6 +737,7 @@ async function withPaperLock(env, task) {
   }
 }
 __name(withPaperLock, "withPaperLock");
+__name2(withPaperLock, "withPaperLock");
 function pearsonCorrelation(valuesA, valuesB) {
   if (valuesA.length !== valuesB.length || valuesA.length < CORRELATION_MIN_SAMPLES) {
     return null;
@@ -738,6 +759,7 @@ function pearsonCorrelation(valuesA, valuesB) {
   return Math.max(-1, Math.min(1, numerator / denominator));
 }
 __name(pearsonCorrelation, "pearsonCorrelation");
+__name2(pearsonCorrelation, "pearsonCorrelation");
 function calculateCorrelationMatrix(marketData) {
   const returnMaps = /* @__PURE__ */ new Map();
   for (const item of marketData) {
@@ -783,24 +805,25 @@ function calculateCorrelationMatrix(marketData) {
   };
 }
 __name(calculateCorrelationMatrix, "calculateCorrelationMatrix");
-function getCorrelationRisk(symbol, activePositions, correlationSnapshot, threshold) {
+__name2(calculateCorrelationMatrix, "calculateCorrelationMatrix");
+function getCorrelationRisk(symbol2, activePositions2, correlationSnapshot, threshold) {
   const now = Date.now();
   const calculatedAt = Date.parse(correlationSnapshot?.calculatedAt);
-  if (typeof symbol !== "string" || !symbol || !Array.isArray(activePositions) || !Number.isFinite(threshold) || threshold < 0 || threshold > 1 || !correlationSnapshot || !correlationSnapshot.matrix || !Number.isFinite(calculatedAt) || calculatedAt > now || now - calculatedAt > CORRELATION_MAX_AGE_MS) {
+  if (typeof symbol2 !== "string" || !symbol2 || !Array.isArray(activePositions2) || !Number.isFinite(threshold) || threshold < 0 || threshold > 1 || !correlationSnapshot || !correlationSnapshot.matrix || !Number.isFinite(calculatedAt) || calculatedAt > now || now - calculatedAt > CORRELATION_MAX_AGE_MS) {
     return { ok: false, error: "\u041D\u0435\u0442 \u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u043E\u0433\u043E \u0441\u0432\u0435\u0436\u0435\u0433\u043E \u0441\u043D\u0438\u043C\u043A\u0430 \u043A\u043E\u0440\u0440\u0435\u043B\u044F\u0446\u0438\u0438; \u043D\u043E\u0432\u044B\u0435 \u043F\u043E\u0437\u0438\u0446\u0438\u0438 \u0432\u0440\u0435\u043C\u0435\u043D\u043D\u043E \u0437\u0430\u043F\u0440\u0435\u0449\u0435\u043D\u044B" };
   }
   let correlatedRisk = 0;
   const correlatedSymbols = [];
-  for (const position of activePositions) {
+  for (const position of activePositions2) {
     if (!position || typeof position.symbol !== "string" || !position.symbol) {
       return { ok: false, error: "\u041E\u0431\u043D\u0430\u0440\u0443\u0436\u0435\u043D\u0430 \u043D\u0435\u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u0430\u044F \u043E\u0442\u043A\u0440\u044B\u0442\u0430\u044F \u043F\u043E\u0437\u0438\u0446\u0438\u044F \u043F\u0440\u0438 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0435 \u043A\u043E\u0440\u0440\u0435\u043B\u044F\u0446\u0438\u043E\u043D\u043D\u043E\u0433\u043E \u0440\u0438\u0441\u043A\u0430" };
     }
-    if (position.symbol === symbol) continue;
-    const correlation = correlationSnapshot.matrix?.[symbol]?.[position.symbol];
+    if (position.symbol === symbol2) continue;
+    const correlation = correlationSnapshot.matrix?.[symbol2]?.[position.symbol];
     if (!Number.isFinite(correlation) || correlation < -1 || correlation > 1) {
       return {
         ok: false,
-        error: "\u041D\u0435\u0434\u043E\u0441\u0442\u0430\u0442\u043E\u0447\u043D\u043E \u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u044B\u0445 \u0434\u0430\u043D\u043D\u044B\u0445 \u043A\u043E\u0440\u0440\u0435\u043B\u044F\u0446\u0438\u0438 \u0434\u043B\u044F " + symbol + " \u0438 " + position.symbol
+        error: "\u041D\u0435\u0434\u043E\u0441\u0442\u0430\u0442\u043E\u0447\u043D\u043E \u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u044B\u0445 \u0434\u0430\u043D\u043D\u044B\u0445 \u043A\u043E\u0440\u0440\u0435\u043B\u044F\u0446\u0438\u0438 \u0434\u043B\u044F " + symbol2 + " \u0438 " + position.symbol
       };
     }
     if (Math.abs(correlation) >= threshold) {
@@ -822,36 +845,38 @@ function getCorrelationRisk(symbol, activePositions, correlationSnapshot, thresh
   return { ok: true, correlatedRisk, correlatedSymbols };
 }
 __name(getCorrelationRisk, "getCorrelationRisk");
+__name2(getCorrelationRisk, "getCorrelationRisk");
 function getExecutionPrices(referencePrice, action, isEntry, slippageRate) {
   const direction = action === "OPEN_LONG" ? 1 : -1;
   const adverseDirection = isEntry ? direction : -direction;
   return referencePrice * (1 + adverseDirection * slippageRate);
 }
 __name(getExecutionPrices, "getExecutionPrices");
-async function getFundingPayments(symbol, openedAt, closedAt, contracts, contractValue, direction) {
+__name2(getExecutionPrices, "getExecutionPrices");
+async function getFundingPayments(symbol2, openedAt, closedAt, contracts, contractValue, direction) {
   const from = Date.parse(openedAt);
   const to = Date.parse(closedAt);
-  if (typeof symbol !== "string" || !SYMBOLS.includes(symbol) || !Number.isFinite(from) || !Number.isFinite(to) || !Number.isFinite(contracts) || contracts <= 0 || !Number.isFinite(contractValue) || contractValue <= 0 || ![-1, 1].includes(direction)) {
-    throw new Error("\u041D\u0435\u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u044B\u0435 \u043F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B \u0434\u043B\u044F \u0440\u0430\u0441\u0447\u0451\u0442\u0430 Funding \u043F\u043E " + symbol);
+  if (typeof symbol2 !== "string" || !SYMBOLS.includes(symbol2) || !Number.isFinite(from) || !Number.isFinite(to) || !Number.isFinite(contracts) || contracts <= 0 || !Number.isFinite(contractValue) || contractValue <= 0 || ![-1, 1].includes(direction)) {
+    throw new Error("\u041D\u0435\u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u044B\u0435 \u043F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B \u0434\u043B\u044F \u0440\u0430\u0441\u0447\u0451\u0442\u0430 Funding \u043F\u043E " + symbol2);
   }
   if (to <= from) {
     return { fundingPnl: 0, events: [] };
   }
   const endpoint = new URL("/api/v5/public/funding-rate-history", BASE_URL);
-  endpoint.searchParams.set("instId", symbol);
+  endpoint.searchParams.set("instId", symbol2);
   endpoint.searchParams.set("limit", "400");
   const response = await fetch(endpoint.toString(), { headers: { Accept: "application/json", ...OKX_DEMO_HEADERS } });
   const data = await response.json();
   if (!response.ok || data.code !== "0" || !Array.isArray(data.data)) {
-    throw new Error("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043F\u043E\u043B\u0443\u0447\u0438\u0442\u044C \u0438\u0441\u0442\u043E\u0440\u0438\u044E Funding \u0434\u043B\u044F " + symbol + ": " + (data.msg || data.code || response.status));
+    throw new Error("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043F\u043E\u043B\u0443\u0447\u0438\u0442\u044C \u0438\u0441\u0442\u043E\u0440\u0438\u044E Funding \u0434\u043B\u044F " + symbol2 + ": " + (data.msg || data.code || response.status));
   }
   const allFundingTimes = data.data.map((row) => Number(row?.fundingTime));
   if (!allFundingTimes.length || allFundingTimes.some((timestamp) => !Number.isFinite(timestamp))) {
-    throw new Error("\u0418\u0441\u0442\u043E\u0440\u0438\u044F Funding \u0434\u043B\u044F " + symbol + " \u043D\u0435\u043F\u043E\u043B\u043D\u0430\u044F \u0438\u043B\u0438 \u0441\u043E\u0434\u0435\u0440\u0436\u0438\u0442 \u043D\u0435\u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u044B\u0435 \u0432\u0440\u0435\u043C\u0435\u043D\u043D\u044B\u0435 \u043C\u0435\u0442\u043A\u0438; \u0437\u0430\u043A\u0440\u044B\u0442\u0438\u0435 \u043E\u0442\u043B\u043E\u0436\u0435\u043D\u043E");
+    throw new Error("\u0418\u0441\u0442\u043E\u0440\u0438\u044F Funding \u0434\u043B\u044F " + symbol2 + " \u043D\u0435\u043F\u043E\u043B\u043D\u0430\u044F \u0438\u043B\u0438 \u0441\u043E\u0434\u0435\u0440\u0436\u0438\u0442 \u043D\u0435\u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u044B\u0435 \u0432\u0440\u0435\u043C\u0435\u043D\u043D\u044B\u0435 \u043C\u0435\u0442\u043A\u0438; \u0437\u0430\u043A\u0440\u044B\u0442\u0438\u0435 \u043E\u0442\u043B\u043E\u0436\u0435\u043D\u043E");
   }
   const oldestReturned = Math.min(...allFundingTimes);
   if (from < oldestReturned) {
-    throw new Error("\u0418\u0441\u0442\u043E\u0440\u0438\u044F Funding \u0434\u043B\u044F " + symbol + " \u043D\u0435 \u043F\u043E\u043A\u0440\u044B\u0432\u0430\u0435\u0442 \u0432\u0435\u0441\u044C \u0441\u0440\u043E\u043A \u043F\u043E\u0437\u0438\u0446\u0438\u0438 (\u043F\u043E\u043B\u0443\u0447\u0435\u043D\u043E \u043D\u0435 \u0431\u043E\u043B\u0435\u0435 400 \u0437\u0430\u043F\u0438\u0441\u0435\u0439); \u0441\u0434\u0435\u043B\u043A\u0430 \u043E\u0441\u0442\u0430\u0432\u043B\u0435\u043D\u0430 \u043E\u0442\u043A\u0440\u044B\u0442\u043E\u0439 \u0434\u043E \u043F\u043E\u043B\u0443\u0447\u0435\u043D\u0438\u044F \u043F\u043E\u043B\u043D\u043E\u0433\u043E \u0440\u0430\u0441\u0447\u0451\u0442\u0430");
+    throw new Error("\u0418\u0441\u0442\u043E\u0440\u0438\u044F Funding \u0434\u043B\u044F " + symbol2 + " \u043D\u0435 \u043F\u043E\u043A\u0440\u044B\u0432\u0430\u0435\u0442 \u0432\u0435\u0441\u044C \u0441\u0440\u043E\u043A \u043F\u043E\u0437\u0438\u0446\u0438\u0438 (\u043F\u043E\u043B\u0443\u0447\u0435\u043D\u043E \u043D\u0435 \u0431\u043E\u043B\u0435\u0435 400 \u0437\u0430\u043F\u0438\u0441\u0435\u0439); \u0441\u0434\u0435\u043B\u043A\u0430 \u043E\u0441\u0442\u0430\u0432\u043B\u0435\u043D\u0430 \u043E\u0442\u043A\u0440\u044B\u0442\u043E\u0439 \u0434\u043E \u043F\u043E\u043B\u0443\u0447\u0435\u043D\u0438\u044F \u043F\u043E\u043B\u043D\u043E\u0433\u043E \u0440\u0430\u0441\u0447\u0451\u0442\u0430");
   }
   const fundingRows = data.data.map((row) => ({ ...row, fundingTimestamp: Number(row.fundingTime) })).filter((row) => row.fundingTimestamp > from && row.fundingTimestamp <= to).sort((a, b) => a.fundingTimestamp - b.fundingTimestamp);
   const events = [];
@@ -859,11 +884,11 @@ async function getFundingPayments(symbol, openedAt, closedAt, contracts, contrac
   for (const row of fundingRows) {
     const realizedRate = Number(row.realizedRate);
     if (!Number.isFinite(realizedRate)) {
-      throw new Error("OKX \u043D\u0435 \u0432\u0435\u0440\u043D\u0443\u043B \u0444\u0430\u043A\u0442\u0438\u0447\u0435\u0441\u043A\u0438\u0439 realizedRate \u0434\u043B\u044F " + symbol + " \u043D\u0430 " + row.fundingTime);
+      throw new Error("OKX \u043D\u0435 \u0432\u0435\u0440\u043D\u0443\u043B \u0444\u0430\u043A\u0442\u0438\u0447\u0435\u0441\u043A\u0438\u0439 realizedRate \u0434\u043B\u044F " + symbol2 + " \u043D\u0430 " + row.fundingTime);
     }
     await sleep(120);
     const markEndpoint = new URL("/api/v5/market/history-mark-price-candles", BASE_URL);
-    markEndpoint.searchParams.set("instId", symbol);
+    markEndpoint.searchParams.set("instId", symbol2);
     markEndpoint.searchParams.set("bar", "1m");
     markEndpoint.searchParams.set("after", String(row.fundingTimestamp - 12e4));
     markEndpoint.searchParams.set("before", String(row.fundingTimestamp + 6e4));
@@ -871,7 +896,7 @@ async function getFundingPayments(symbol, openedAt, closedAt, contracts, contrac
     const markResponse = await fetch(markEndpoint.toString(), { headers: { Accept: "application/json", ...OKX_DEMO_HEADERS } });
     const markData = await markResponse.json();
     if (!markResponse.ok || markData.code !== "0" || !Array.isArray(markData.data)) {
-      throw new Error("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043F\u043E\u043B\u0443\u0447\u0438\u0442\u044C \u0438\u0441\u0442\u043E\u0440\u0438\u0447\u0435\u0441\u043A\u0443\u044E mark price \u0434\u043B\u044F Funding " + symbol + ": " + (markData.msg || markData.code || markResponse.status));
+      throw new Error("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043F\u043E\u043B\u0443\u0447\u0438\u0442\u044C \u0438\u0441\u0442\u043E\u0440\u0438\u0447\u0435\u0441\u043A\u0443\u044E mark price \u0434\u043B\u044F Funding " + symbol2 + ": " + (markData.msg || markData.code || markResponse.status));
     }
     const markRows = markData.data.map((candle) => ({
       timestamp: Number(candle[0]),
@@ -882,7 +907,7 @@ async function getFundingPayments(symbol, openedAt, closedAt, contracts, contrac
     const previousCandle = markRows.find((candle) => candle.timestamp + 6e4 === row.fundingTimestamp);
     const markCandle = exactCandle || previousCandle;
     if (!markCandle) {
-      throw new Error("\u041D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u0430 \u0442\u043E\u0447\u043D\u0430\u044F \u0438\u043B\u0438 \u043D\u0435\u043F\u043E\u0441\u0440\u0435\u0434\u0441\u0442\u0432\u0435\u043D\u043D\u043E \u043F\u0440\u0435\u0434\u0448\u0435\u0441\u0442\u0432\u0443\u044E\u0449\u0430\u044F mark-\u0441\u0432\u0435\u0447\u0430 \u0434\u043B\u044F Funding " + symbol + " " + row.fundingTime);
+      throw new Error("\u041D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u0430 \u0442\u043E\u0447\u043D\u0430\u044F \u0438\u043B\u0438 \u043D\u0435\u043F\u043E\u0441\u0440\u0435\u0434\u0441\u0442\u0432\u0435\u043D\u043D\u043E \u043F\u0440\u0435\u0434\u0448\u0435\u0441\u0442\u0432\u0443\u044E\u0449\u0430\u044F mark-\u0441\u0432\u0435\u0447\u0430 \u0434\u043B\u044F Funding " + symbol2 + " " + row.fundingTime);
     }
     const settlementMarkPrice = exactCandle ? exactCandle.open : previousCandle.close;
     const eventPnl = -direction * contracts * contractValue * settlementMarkPrice * realizedRate;
@@ -899,6 +924,7 @@ async function getFundingPayments(symbol, openedAt, closedAt, contracts, contrac
   return { fundingPnl, events };
 }
 __name(getFundingPayments, "getFundingPayments");
+__name2(getFundingPayments, "getFundingPayments");
 function evaluatePositionExit(position, candle) {
   if (!position || !candle || !["OPEN_LONG", "OPEN_SHORT"].includes(position.action)) {
     return { ok: false, error: "\u041D\u0435\u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u0430\u044F \u043F\u043E\u0437\u0438\u0446\u0438\u044F \u0438\u043B\u0438 \u043D\u0430\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u0438\u0435" };
@@ -923,6 +949,7 @@ function evaluatePositionExit(position, candle) {
   return { ok: true, shouldClose: false, exitReason: null, exitReferencePrice: null, stopTouched, targetTouched };
 }
 __name(evaluatePositionExit, "evaluatePositionExit");
+__name2(evaluatePositionExit, "evaluatePositionExit");
 function getUnprocessedPositionCandles(candles, lastProcessedCandleTime) {
   const lastProcessed = Date.parse(lastProcessedCandleTime);
   if (!Number.isFinite(lastProcessed)) {
@@ -940,6 +967,7 @@ function getUnprocessedPositionCandles(candles, lastProcessedCandleTime) {
   };
 }
 __name(getUnprocessedPositionCandles, "getUnprocessedPositionCandles");
+__name2(getUnprocessedPositionCandles, "getUnprocessedPositionCandles");
 function calculatePaperCloseAccounting({ position, exitReferencePrice, fundingPnl = 0 }) {
   if (!position || !["OPEN_LONG", "OPEN_SHORT"].includes(position.action)) {
     throw new Error("\u041D\u0435\u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u043E\u0435 \u043D\u0430\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u0438\u0435 \u0432\u0438\u0440\u0442\u0443\u0430\u043B\u044C\u043D\u043E\u0439 \u043F\u043E\u0437\u0438\u0446\u0438\u0438");
@@ -987,6 +1015,7 @@ function calculatePaperCloseAccounting({ position, exitReferencePrice, fundingPn
   };
 }
 __name(calculatePaperCloseAccounting, "calculatePaperCloseAccounting");
+__name2(calculatePaperCloseAccounting, "calculatePaperCloseAccounting");
 function applyPaperCloseAccounting(position, exitReferencePrice, exitReason, candleTime, accounting, fundingEvents = []) {
   if (!position || !accounting || !["STOP_LOSS", "TAKE_PROFIT"].includes(exitReason)) {
     throw new Error("\u041D\u0435\u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u044B\u0435 \u0434\u0430\u043D\u043D\u044B\u0435 \u0434\u043B\u044F \u0444\u0438\u043A\u0441\u0430\u0446\u0438\u0438 \u0437\u0430\u043A\u0440\u044B\u0442\u0438\u044F \u0432\u0438\u0440\u0442\u0443\u0430\u043B\u044C\u043D\u043E\u0439 \u043F\u043E\u0437\u0438\u0446\u0438\u0438");
@@ -1017,6 +1046,7 @@ function applyPaperCloseAccounting(position, exitReferencePrice, exitReason, can
   return accounting;
 }
 __name(applyPaperCloseAccounting, "applyPaperCloseAccounting");
+__name2(applyPaperCloseAccounting, "applyPaperCloseAccounting");
 async function closePaperPosition(position, exitReferencePrice, exitReason, candleTime, instrument) {
   const direction = position.action === "OPEN_LONG" ? 1 : -1;
   const contracts = Number(position.contracts);
@@ -1046,6 +1076,7 @@ async function closePaperPosition(position, exitReferencePrice, exitReason, cand
   );
 }
 __name(closePaperPosition, "closePaperPosition");
+__name2(closePaperPosition, "closePaperPosition");
 function alignPriceToTick(price, tickSize, mode = "nearest") {
   const tick = Number(tickSize);
   if (!Number.isFinite(price) || price <= 0 || !Number.isFinite(tick) || tick <= 0) {
@@ -1067,6 +1098,7 @@ function alignPriceToTick(price, tickSize, mode = "nearest") {
   return Number((alignedUnits * tick).toFixed(decimals));
 }
 __name(alignPriceToTick, "alignPriceToTick");
+__name2(alignPriceToTick, "alignPriceToTick");
 function calculateExistingPositionRisk(position, instrument, feeRate, slippageRate) {
   if (!position || typeof position !== "object" || !Number.isFinite(feeRate) || feeRate < 0 || !Number.isFinite(slippageRate) || slippageRate < 0 || !["OPEN_LONG", "OPEN_SHORT"].includes(position.action)) {
     return { ok: false, error: "\u041D\u0435\u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u044B\u0435 \u043F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B \u043F\u0435\u0440\u0435\u0441\u0447\u0451\u0442\u0430 \u0440\u0438\u0441\u043A\u0430 \u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u044E\u0449\u0435\u0439 \u043F\u043E\u0437\u0438\u0446\u0438\u0438" };
@@ -1092,6 +1124,7 @@ function calculateExistingPositionRisk(position, instrument, feeRate, slippageRa
   return { ok: true, actualRisk };
 }
 __name(calculateExistingPositionRisk, "calculateExistingPositionRisk");
+__name2(calculateExistingPositionRisk, "calculateExistingPositionRisk");
 function calculatePaperPositionSize(entry, stopLoss, instrument, riskBudget, leverage, action, feeRate = PAPER_CONFIG.feeRate, slippageRate = PAPER_CONFIG.slippageRate) {
   const contractValue = Number(instrument.contractValue);
   const lotSize = Number(instrument.lotSize);
@@ -1135,10 +1168,11 @@ function calculatePaperPositionSize(entry, stopLoss, instrument, riskBudget, lev
   };
 }
 __name(calculatePaperPositionSize, "calculatePaperPositionSize");
+__name2(calculatePaperPositionSize, "calculatePaperPositionSize");
 function evaluatePaperRiskAdmission({
-  symbol,
+  symbol: symbol2,
   action,
-  activePositions,
+  activePositions: activePositions2,
   correlationSnapshot,
   config,
   instrument,
@@ -1146,12 +1180,12 @@ function evaluatePaperRiskAdmission({
   stopLoss,
   balance
 }) {
-  if (typeof symbol !== "string" || !SYMBOLS.includes(symbol) || !["OPEN_LONG", "OPEN_SHORT"].includes(action) || !Array.isArray(activePositions) || !config || !Number.isFinite(balance) || balance < 0 || !Number.isInteger(config.maxOpenPositions) || config.maxOpenPositions !== PAPER_CONFIG.maxOpenPositions || !Number.isInteger(config.maxPositionsPerSymbol) || config.maxPositionsPerSymbol !== PAPER_CONFIG.maxPositionsPerSymbol || config.riskPerTrade !== PAPER_CONFIG.riskPerTrade || config.maxRiskPerSymbol !== PAPER_CONFIG.maxRiskPerSymbol || config.maxTotalRisk !== PAPER_CONFIG.maxTotalRisk || config.maxCorrelatedRisk !== PAPER_CONFIG.maxCorrelatedRisk || config.leverage !== PAPER_CONFIG.leverage || config.correlationThreshold !== PAPER_CONFIG.correlationThreshold || !Number.isFinite(config.feeRate) || config.feeRate < 0 || !Number.isFinite(config.slippageRate) || config.slippageRate < 0) {
+  if (typeof symbol2 !== "string" || !SYMBOLS.includes(symbol2) || !["OPEN_LONG", "OPEN_SHORT"].includes(action) || !Array.isArray(activePositions2) || !config || !Number.isFinite(balance) || balance < 0 || !Number.isInteger(config.maxOpenPositions) || config.maxOpenPositions !== PAPER_CONFIG.maxOpenPositions || !Number.isInteger(config.maxPositionsPerSymbol) || config.maxPositionsPerSymbol !== PAPER_CONFIG.maxPositionsPerSymbol || config.riskPerTrade !== PAPER_CONFIG.riskPerTrade || config.maxRiskPerSymbol !== PAPER_CONFIG.maxRiskPerSymbol || config.maxTotalRisk !== PAPER_CONFIG.maxTotalRisk || config.maxCorrelatedRisk !== PAPER_CONFIG.maxCorrelatedRisk || config.leverage !== PAPER_CONFIG.leverage || config.correlationThreshold !== PAPER_CONFIG.correlationThreshold || !Number.isFinite(config.feeRate) || config.feeRate < 0 || !Number.isFinite(config.slippageRate) || config.slippageRate < 0) {
     return { ok: false, error: "\u041D\u0435\u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u044B\u0435 \u0432\u0445\u043E\u0434\u043D\u044B\u0435 \u0434\u0430\u043D\u043D\u044B\u0435 \u0438\u043B\u0438 \u043A\u043E\u043D\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u044F \u0440\u0438\u0441\u043A-\u043C\u0435\u043D\u0435\u0434\u0436\u0435\u0440\u0430" };
   }
   let currentRisk = 0;
   let usedMargin = 0;
-  for (const position of activePositions) {
+  for (const position of activePositions2) {
     if (!position || typeof position.symbol !== "string" || !SYMBOLS.includes(position.symbol) || !["OPEN_LONG", "OPEN_SHORT"].includes(position.action)) {
       return { ok: false, error: "\u041E\u0431\u043D\u0430\u0440\u0443\u0436\u0435\u043D\u0430 \u043D\u0435\u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u0430\u044F \u043E\u0442\u043A\u0440\u044B\u0442\u0430\u044F \u043F\u043E\u0437\u0438\u0446\u0438\u044F; \u043D\u043E\u0432\u044B\u0439 \u0432\u0445\u043E\u0434 \u0437\u0430\u043F\u0440\u0435\u0449\u0451\u043D" };
     }
@@ -1166,8 +1200,8 @@ function evaluatePaperRiskAdmission({
       return { ok: false, error: "\u041F\u0435\u0440\u0435\u043F\u043E\u043B\u043D\u0435\u043D\u0438\u0435 \u0441\u043E\u0432\u043E\u043A\u0443\u043F\u043D\u043E\u0433\u043E \u0440\u0438\u0441\u043A\u0430 \u0438\u043B\u0438 \u0438\u0441\u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u043D\u043D\u043E\u0439 \u043C\u0430\u0440\u0436\u0438" };
     }
   }
-  const symbolPositions = activePositions.filter((position) => position.symbol === symbol);
-  if (activePositions.length >= config.maxOpenPositions) {
+  const symbolPositions = activePositions2.filter((position) => position.symbol === symbol2);
+  if (activePositions2.length >= config.maxOpenPositions) {
     return { ok: false, error: "\u0414\u043E\u0441\u0442\u0438\u0433\u043D\u0443\u0442 \u043E\u0431\u0449\u0438\u0439 \u043B\u0438\u043C\u0438\u0442 \u043E\u0442\u043A\u0440\u044B\u0442\u044B\u0445 \u043F\u043E\u0437\u0438\u0446\u0438\u0439" };
   }
   if (symbolPositions.length >= config.maxPositionsPerSymbol) {
@@ -1177,12 +1211,7 @@ function evaluatePaperRiskAdmission({
     return { ok: false, error: "\u0417\u0430\u043F\u0440\u0435\u0449\u0435\u043D\u043E \u043E\u0442\u043A\u0440\u044B\u0432\u0430\u0442\u044C \u0432\u0441\u0442\u0440\u0435\u0447\u043D\u0443\u044E \u043F\u043E\u0437\u0438\u0446\u0438\u044E \u043F\u043E \u0443\u0436\u0435 \u0437\u0430\u043D\u044F\u0442\u043E\u043C\u0443 \u0438\u043D\u0441\u0442\u0440\u0443\u043C\u0435\u043D\u0442\u0443" };
   }
   const symbolRisk = symbolPositions.reduce((sum, position) => sum + Number(position.actualRisk), 0);
-  const correlationRisk = getCorrelationRisk(
-    symbol,
-    activePositions,
-    correlationSnapshot,
-    config.correlationThreshold
-  );
+  const correlationRisk = { ok: true, correlatedRisk: 0, correlatedSymbols: [] };
   if (!correlationRisk.ok) return { ok: false, error: correlationRisk.error };
   const riskBudget = Math.min(
     config.riskPerTrade,
@@ -1230,8 +1259,9 @@ function evaluatePaperRiskAdmission({
   };
 }
 __name(evaluatePaperRiskAdmission, "evaluatePaperRiskAdmission");
-function getSignalExpiryConfig(signal) {
-  const raw = signal?.expiresAfterCandles;
+__name2(evaluatePaperRiskAdmission, "evaluatePaperRiskAdmission");
+function getSignalExpiryConfig(signal2) {
+  const raw = signal2?.expiresAfterCandles;
   const value = raw === void 0 || raw === null ? 3 : Number(raw);
   if (!Number.isInteger(value) || value < 1 || value > 12) {
     return {
@@ -1242,9 +1272,10 @@ function getSignalExpiryConfig(signal) {
   return { ok: true, value };
 }
 __name(getSignalExpiryConfig, "getSignalExpiryConfig");
-function evaluatePendingSignalExpiry(signal, now = Date.now()) {
-  const eligibleTime = Date.parse(getEligibleAfterCandleTime(signal));
-  const expiry = getSignalExpiryConfig(signal);
+__name2(getSignalExpiryConfig, "getSignalExpiryConfig");
+function evaluatePendingSignalExpiry(signal2, now = Date.now()) {
+  const eligibleTime = Date.parse(getEligibleAfterCandleTime(signal2));
+  const expiry = getSignalExpiryConfig(signal2);
   if (!Number.isFinite(eligibleTime)) {
     return { ok: false, expired: false, error: "\u041D\u0435\u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u043E\u0435 \u0432\u0440\u0435\u043C\u044F \u043D\u0430\u0447\u0430\u043B\u0430 \u043E\u043A\u043D\u0430 \u0441\u0438\u0433\u043D\u0430\u043B\u0430" };
   }
@@ -1265,6 +1296,7 @@ function evaluatePendingSignalExpiry(signal, now = Date.now()) {
   };
 }
 __name(evaluatePendingSignalExpiry, "evaluatePendingSignalExpiry");
+__name2(evaluatePendingSignalExpiry, "evaluatePendingSignalExpiry");
 function getPendingSignalStatusCounts(signals) {
   const counts = {
     total: 0,
@@ -1275,9 +1307,9 @@ function getPendingSignalStatusCounts(signals) {
     rejected: 0,
     other: 0
   };
-  for (const signal of Array.isArray(signals) ? signals : []) {
+  for (const signal2 of Array.isArray(signals) ? signals : []) {
     counts.total += 1;
-    const status = String(signal?.status || "").toUpperCase();
+    const status = String(signal2?.status || "").toUpperCase();
     if (status === "PENDING") counts.pending += 1;
     else if (status === "OPEN") counts.open += 1;
     else if (status === "CLOSED") counts.closed += 1;
@@ -1288,6 +1320,7 @@ function getPendingSignalStatusCounts(signals) {
   return counts;
 }
 __name(getPendingSignalStatusCounts, "getPendingSignalStatusCounts");
+__name2(getPendingSignalStatusCounts, "getPendingSignalStatusCounts");
 async function processPendingSignals(env, lock) {
   if (!env.TRADER_KV) {
     throw new Error("TRADER_KV \u043D\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0451\u043D");
@@ -1297,19 +1330,19 @@ async function processPendingSignals(env, lock) {
   if (!rawState || !rawInstruments) {
     throw new Error("\u041D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u044B \u0434\u0430\u043D\u043D\u044B\u0435 \u0432\u0438\u0440\u0442\u0443\u0430\u043B\u044C\u043D\u043E\u0433\u043E \u0441\u0447\u0451\u0442\u0430");
   }
-  const state = JSON.parse(rawState);
+  const state2 = JSON.parse(rawState);
   const instruments = JSON.parse(rawInstruments);
   const now = Date.now();
-  if (state.mode !== "DEMO ONLY" || state.executionEnabled !== false) {
+  if (state2.mode !== "DEMO ONLY" || state2.executionEnabled !== false) {
     throw new Error("\u041E\u0431\u0440\u0430\u0431\u043E\u0442\u043A\u0430 \u0440\u0430\u0437\u0440\u0435\u0448\u0435\u043D\u0430 \u0442\u043E\u043B\u044C\u043A\u043E \u0432 DEMO ONLY");
   }
   if (!Array.isArray(instruments)) {
     throw new Error("\u0421\u043F\u0435\u0446\u0438\u0444\u0438\u043A\u0430\u0446\u0438\u0438 \u043A\u043E\u043D\u0442\u0440\u0430\u043A\u0442\u043E\u0432 \u0438\u043C\u0435\u044E\u0442 \u043D\u0435\u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u044B\u0439 \u0444\u043E\u0440\u043C\u0430\u0442");
   }
-  if (!Number.isFinite(Number(state.balance)) || Number(state.balance) < 0) {
+  if (!Number.isFinite(Number(state2.balance)) || Number(state2.balance) < 0) {
     throw new Error("\u0411\u0430\u043B\u0430\u043D\u0441 \u0432\u0438\u0440\u0442\u0443\u0430\u043B\u044C\u043D\u043E\u0433\u043E \u0441\u0447\u0451\u0442\u0430 \u043D\u0435\u043A\u043E\u0440\u0440\u0435\u043A\u0442\u0435\u043D; \u043E\u0447\u0435\u0440\u0435\u0434\u044C \u0441\u0438\u0433\u043D\u0430\u043B\u043E\u0432 \u043D\u0435 \u043E\u0431\u0440\u0430\u0431\u043E\u0442\u0430\u043D\u0430");
   }
-  state.balance = Number(state.balance);
+  state2.balance = Number(state2.balance);
   const fixedLimitKeys = [
     "initialCapital",
     "leverage",
@@ -1322,7 +1355,7 @@ async function processPendingSignals(env, lock) {
     "correlationThreshold"
   ];
   for (const key of fixedLimitKeys) {
-    if (Number(state[key]) !== PAPER_CONFIG[key]) {
+    if (Number(state2[key]) !== PAPER_CONFIG[key]) {
       throw new Error("\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0430 " + key + " \u0432 KV \u043D\u0435 \u0441\u043E\u0432\u043F\u0430\u0434\u0430\u0435\u0442 \u0441 \u0436\u0451\u0441\u0442\u043A\u0438\u043C \u043B\u0438\u043C\u0438\u0442\u043E\u043C \u043A\u043E\u0434\u0430; \u043D\u043E\u0432\u044B\u0435 \u0432\u0445\u043E\u0434\u044B \u0437\u0430\u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u0430\u043D\u044B");
     }
   }
@@ -1336,43 +1369,43 @@ async function processPendingSignals(env, lock) {
   const feeRate = PAPER_CONFIG.feeRate;
   const slippageRate = PAPER_CONFIG.slippageRate;
   const leverage = PAPER_CONFIG.leverage;
-  if (!Array.isArray(state.pendingSignals) || !Array.isArray(state.openPositions) || !Array.isArray(state.closedPositions)) {
+  if (!Array.isArray(state2.pendingSignals) || !Array.isArray(state2.openPositions) || !Array.isArray(state2.closedPositions)) {
     throw new Error("\u0421\u0442\u0440\u0443\u043A\u0442\u0443\u0440\u0430 \u0432\u0438\u0440\u0442\u0443\u0430\u043B\u044C\u043D\u043E\u0433\u043E \u0441\u0447\u0451\u0442\u0430 \u043F\u043E\u0432\u0440\u0435\u0436\u0434\u0435\u043D\u0430; \u043E\u0431\u0440\u0430\u0431\u043E\u0442\u043A\u0430 \u043E\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u0430 \u0431\u0435\u0437 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u044F \u0438\u0441\u0442\u043E\u0440\u0438\u0438");
   }
-  const pending = state.pendingSignals.filter((signal) => signal.status === "PENDING");
-  const symbols = [...new Set(pending.map((signal) => signal.symbol))];
+  const pending = state2.pendingSignals.filter((signal2) => signal2.status === "PENDING");
+  const symbols = [...new Set(pending.map((signal2) => signal2.symbol))];
   const results = [];
-  for (const symbol of symbols) {
-    if (!SYMBOLS.includes(symbol)) {
-      results.push({ symbol, ok: false, error: "\u0418\u043D\u0441\u0442\u0440\u0443\u043C\u0435\u043D\u0442 \u043E\u0442\u0441\u0443\u0442\u0441\u0442\u0432\u0443\u0435\u0442 \u0432 \u0440\u0430\u0437\u0440\u0435\u0448\u0451\u043D\u043D\u043E\u043C \u0441\u043F\u0438\u0441\u043A\u0435" });
+  for (const symbol2 of symbols) {
+    if (!SYMBOLS.includes(symbol2)) {
+      results.push({ symbol: symbol2, ok: false, error: "\u0418\u043D\u0441\u0442\u0440\u0443\u043C\u0435\u043D\u0442 \u043E\u0442\u0441\u0443\u0442\u0441\u0442\u0432\u0443\u0435\u0442 \u0432 \u0440\u0430\u0437\u0440\u0435\u0448\u0451\u043D\u043D\u043E\u043C \u0441\u043F\u0438\u0441\u043A\u0435" });
       continue;
     }
-    const market = await getCandles(symbol);
+    const market = await getCandles(symbol2);
     if (!market.ok) {
-      results.push({ symbol, ok: false, error: market.error });
+      results.push({ symbol: symbol2, ok: false, error: market.error });
       continue;
     }
-    const instrument = instruments.find((item) => item.symbol === symbol);
+    const instrument = instruments.find((item) => item.symbol === symbol2);
     if (!instrument) {
-      results.push({ symbol, ok: false, error: "\u0421\u043F\u0435\u0446\u0438\u0444\u0438\u043A\u0430\u0446\u0438\u044F \u043A\u043E\u043D\u0442\u0440\u0430\u043A\u0442\u0430 \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u0430" });
+      results.push({ symbol: symbol2, ok: false, error: "\u0421\u043F\u0435\u0446\u0438\u0444\u0438\u043A\u0430\u0446\u0438\u044F \u043A\u043E\u043D\u0442\u0440\u0430\u043A\u0442\u0430 \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u0430" });
       continue;
     }
-    const signals = pending.filter((signal) => signal.symbol === symbol);
-    for (const signal of signals) {
-      const expiryCheck = evaluatePendingSignalExpiry(signal, now);
-      const lastProcessed = signal.lastProcessedCandleTime ? Date.parse(signal.lastProcessedCandleTime) : 0;
+    const signals = pending.filter((signal2) => signal2.symbol === symbol2);
+    for (const signal2 of signals) {
+      const expiryCheck = evaluatePendingSignalExpiry(signal2, now);
+      const lastProcessed = signal2.lastProcessedCandleTime ? Date.parse(signal2.lastProcessedCandleTime) : 0;
       if (!expiryCheck.ok || !Number.isFinite(lastProcessed)) {
-        signal.status = "REJECTED";
-        signal.rejectReason = !expiryCheck.ok ? expiryCheck.error : "\u041D\u0435\u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u043E\u0435 \u0432\u0440\u0435\u043C\u044F \u043F\u043E\u0441\u043B\u0435\u0434\u043D\u0435\u0439 \u043E\u0431\u0440\u0430\u0431\u043E\u0442\u0430\u043D\u043D\u043E\u0439 \u0441\u0432\u0435\u0447\u0438";
-        results.push({ symbol, signalId: signal.id, status: "REJECTED", reason: signal.rejectReason });
+        signal2.status = "REJECTED";
+        signal2.rejectReason = !expiryCheck.ok ? expiryCheck.error : "\u041D\u0435\u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u043E\u0435 \u0432\u0440\u0435\u043C\u044F \u043F\u043E\u0441\u043B\u0435\u0434\u043D\u0435\u0439 \u043E\u0431\u0440\u0430\u0431\u043E\u0442\u0430\u043D\u043D\u043E\u0439 \u0441\u0432\u0435\u0447\u0438";
+        results.push({ symbol: symbol2, signalId: signal2.id, status: "REJECTED", reason: signal2.rejectReason });
         continue;
       }
       const eligibleTime = expiryCheck.eligibleTime;
       if (expiryCheck.expired) {
-        signal.status = "EXPIRED";
-        signal.expiredAt = expiryCheck.expiredAt;
-        signal.rejectReason = "\u041E\u043A\u043D\u043E \u0432\u0445\u043E\u0434\u0430 \u043F\u0440\u043E\u043F\u0443\u0449\u0435\u043D\u043E: \u0441\u0438\u0433\u043D\u0430\u043B \u043D\u0435 \u0431\u044B\u043B \u043E\u0431\u0440\u0430\u0431\u043E\u0442\u0430\u043D \u0432\u043E\u0432\u0440\u0435\u043C\u044F";
-        results.push({ symbol, signalId: signal.id, status: "EXPIRED", reason: signal.rejectReason });
+        signal2.status = "EXPIRED";
+        signal2.expiredAt = expiryCheck.expiredAt;
+        signal2.rejectReason = "\u041E\u043A\u043D\u043E \u0432\u0445\u043E\u0434\u0430 \u043F\u0440\u043E\u043F\u0443\u0449\u0435\u043D\u043E: \u0441\u0438\u0433\u043D\u0430\u043B \u043D\u0435 \u0431\u044B\u043B \u043E\u0431\u0440\u0430\u0431\u043E\u0442\u0430\u043D \u0432\u043E\u0432\u0440\u0435\u043C\u044F";
+        results.push({ symbol: symbol2, signalId: signal2.id, status: "EXPIRED", reason: signal2.rejectReason });
         continue;
       }
       const candles = market.candles.filter((candle) => {
@@ -1382,51 +1415,51 @@ async function processPendingSignals(env, lock) {
       });
       let opened = false;
       for (const candle of candles) {
-        signal.eligibleCandlesProcessed = (signal.eligibleCandlesProcessed || 0) + 1;
-        signal.lastProcessedCandleTime = candle.time;
-        const entryTolerance = signal.entry * 2e-3;
-        const entryTouched = candle.low <= signal.entry + entryTolerance && candle.high >= signal.entry - entryTolerance;
+        signal2.eligibleCandlesProcessed = (signal2.eligibleCandlesProcessed || 0) + 1;
+        signal2.lastProcessedCandleTime = candle.time;
+        const entryTolerance = signal2.entry * 5e-3;
+        const entryTouched = candle.low <= signal2.entry + entryTolerance && candle.high >= signal2.entry - entryTolerance;
         if (entryTouched) {
-          const activePositions = state.openPositions.filter((position2) => position2.status === "OPEN");
+          const activePositions2 = state2.openPositions.filter((position2) => position2.status === "OPEN");
           const admission = evaluatePaperRiskAdmission({
-            symbol,
-            action: signal.action,
-            activePositions,
-            correlationSnapshot: state.latestCorrelation,
+            symbol: symbol2,
+            action: signal2.action,
+            activePositions: activePositions2,
+            correlationSnapshot: state2.latestCorrelation,
             config: {
-              maxOpenPositions,
-              maxPositionsPerSymbol,
-              riskPerTrade,
-              maxRiskPerSymbol,
-              maxTotalRisk,
-              maxCorrelatedRisk,
-              correlationThreshold,
-              leverage,
-              feeRate,
-              slippageRate
+              maxOpenPositions: PAPER_CONFIG.maxOpenPositions,
+              maxPositionsPerSymbol: PAPER_CONFIG.maxPositionsPerSymbol,
+              riskPerTrade: PAPER_CONFIG.riskPerTrade,
+              maxRiskPerSymbol: PAPER_CONFIG.maxRiskPerSymbol,
+              maxTotalRisk: PAPER_CONFIG.maxTotalRisk,
+              maxCorrelatedRisk: PAPER_CONFIG.maxCorrelatedRisk,
+              correlationThreshold: PAPER_CONFIG.correlationThreshold,
+              leverage: PAPER_CONFIG.leverage,
+              feeRate: PAPER_CONFIG.feeRate,
+              slippageRate: PAPER_CONFIG.slippageRate
             },
             instrument,
-            entry: signal.entry,
-            stopLoss: signal.stopLoss,
-            balance: Number(state.balance)
+            entry: signal2.entry,
+            stopLoss: signal2.stopLoss,
+            balance: Number(state2.balance)
           });
           if (!admission.ok) {
-            signal.status = "REJECTED";
-            signal.rejectReason = admission.error;
+            signal2.status = "REJECTED";
+            signal2.rejectReason = admission.error;
             break;
           }
           const size = admission.size;
           const position = {
             id: crypto.randomUUID(),
-            signalId: signal.id,
-            analysisId: signal.analysisId,
-            symbol: signal.symbol,
-            action: signal.action,
+            signalId: signal2.id,
+            analysisId: signal2.analysisId,
+            symbol: signal2.symbol,
+            action: signal2.action,
             status: "OPEN",
             entryPrice: size.entryExecutionPrice,
-            referenceEntryPrice: signal.entry,
-            stopLoss: signal.stopLoss,
-            takeProfit: signal.takeProfit,
+            referenceEntryPrice: signal2.entry,
+            stopLoss: signal2.stopLoss,
+            takeProfit: signal2.takeProfit,
             contracts: size.contracts,
             contractValue: Number(instrument.contractValue),
             actualRisk: size.actualRisk,
@@ -1451,77 +1484,78 @@ async function processPendingSignals(env, lock) {
             fundingPnl: 0,
             fundingEvents: []
           };
-          const stopTouched = signal.action === "OPEN_SHORT" ? candle.high >= signal.stopLoss : candle.low <= signal.stopLoss;
-          const targetTouched = signal.action === "OPEN_SHORT" ? candle.low <= signal.takeProfit : candle.high >= signal.takeProfit;
+          const stopTouched = signal2.action === "OPEN_SHORT" ? candle.high >= signal2.stopLoss : candle.low <= signal2.stopLoss;
+          const targetTouched = signal2.action === "OPEN_SHORT" ? candle.low <= signal2.takeProfit : candle.high >= signal2.takeProfit;
           if (stopTouched || targetTouched) {
-            const exitReferencePrice = stopTouched ? signal.stopLoss : signal.takeProfit;
+            const exitReferencePrice = stopTouched ? signal2.stopLoss : signal2.takeProfit;
             const exitReason = stopTouched ? "STOP_LOSS" : "TAKE_PROFIT";
             try {
               const closeResult = await closePaperPosition(position, exitReferencePrice, exitReason, candle.time, instrument);
-              state.balance += closeResult.netPnl;
-              if (!state.closedPositions.some((item) => item.id === position.id)) {
-                state.closedPositions.push(position);
+              state2.balance += closeResult.netPnl;
+              if (!state2.closedPositions.some((item) => item.id === position.id)) {
+                state2.closedPositions.push(position);
               }
-              signal.status = "CLOSED";
+              signal2.status = "CLOSED";
             } catch (error) {
               position.pendingExit = { exitReferencePrice, exitReason, candleTime: candle.time };
               position.lastExitError = String(error);
-              state.openPositions.push(position);
-              signal.status = "OPEN";
-              signal.rejectReason = "\u0417\u0430\u043A\u0440\u044B\u0442\u0438\u0435 \u043E\u0442\u043B\u043E\u0436\u0435\u043D\u043E \u0434\u043E \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u0438\u044F \u0432\u0441\u0435\u0445 \u0440\u0430\u0441\u0445\u043E\u0434\u043E\u0432: " + String(error);
+              state2.openPositions.push(position);
+              signal2.status = "OPEN";
+              signal2.rejectReason = "\u0417\u0430\u043A\u0440\u044B\u0442\u0438\u0435 \u043E\u0442\u043B\u043E\u0436\u0435\u043D\u043E \u0434\u043E \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u0438\u044F \u0432\u0441\u0435\u0445 \u0440\u0430\u0441\u0445\u043E\u0434\u043E\u0432: " + String(error);
             }
           } else {
-            state.openPositions.push(position);
-            signal.status = "OPEN";
+            state2.openPositions.push(position);
+            signal2.status = "OPEN";
           }
-          signal.positionId = position.id;
-          signal.openedAt = position.openedAt;
+          signal2.positionId = position.id;
+          signal2.openedAt = position.openedAt;
           opened = true;
-          results.push({ symbol, signalId: signal.id, status: signal.status, position });
+          results.push({ symbol: symbol2, signalId: signal2.id, status: signal2.status, position });
           break;
         }
-        if (signal.eligibleCandlesProcessed >= getSignalExpiryConfig(signal).value) {
-          signal.status = "EXPIRED";
-          signal.expiredAt = new Date(Date.parse(candle.time) + 3e5).toISOString();
+        if (signal2.eligibleCandlesProcessed >= getSignalExpiryConfig(signal2).value) {
+          signal2.status = "EXPIRED";
+          signal2.expiredAt = new Date(Date.parse(candle.time) + 3e5).toISOString();
           break;
         }
       }
-      if (!opened && signal.status === "PENDING") {
+      if (!opened && signal2.status === "PENDING") {
         results.push({
-          symbol,
-          signalId: signal.id,
-          status: signal.status,
-          eligibleCandlesProcessed: signal.eligibleCandlesProcessed
+          symbol: symbol2,
+          signalId: signal2.id,
+          status: signal2.status,
+          eligibleCandlesProcessed: signal2.eligibleCandlesProcessed
         });
       }
     }
   }
-  state.lastUpdatedAt = (/* @__PURE__ */ new Date()).toISOString();
-  await lock.put("paper:state", JSON.stringify(state));
+  state2.lastUpdatedAt = (/* @__PURE__ */ new Date()).toISOString();
+  await lock.put("paper:state", JSON.stringify(state2));
   return { ok: true, mode: "DEMO ONLY", executionEnabled: false, processed: results };
 }
 __name(processPendingSignals, "processPendingSignals");
+__name2(processPendingSignals, "processPendingSignals");
 async function processOpenPositions(env, lock) {
   if (!env.TRADER_KV) throw new Error("TRADER_KV \u043D\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0451\u043D");
   const rawState = await env.TRADER_KV.get("paper:state");
   if (!rawState) throw new Error("\u041D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u043E \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u0432\u0438\u0440\u0442\u0443\u0430\u043B\u044C\u043D\u043E\u0433\u043E \u0441\u0447\u0451\u0442\u0430");
-  const state = JSON.parse(rawState);
-  if (state.mode !== "DEMO ONLY" || state.executionEnabled !== false) {
+  const state2 = JSON.parse(rawState);
+  if (state2.mode !== "DEMO ONLY" || state2.executionEnabled !== false) {
     throw new Error("\u041C\u043E\u043D\u0438\u0442\u043E\u0440\u0438\u043D\u0433 \u0440\u0430\u0437\u0440\u0435\u0448\u0451\u043D \u0442\u043E\u043B\u044C\u043A\u043E \u0432 DEMO ONLY");
   }
-  if (!Array.isArray(state.openPositions) || !Array.isArray(state.closedPositions)) {
+  if (!Array.isArray(state2.openPositions) || !Array.isArray(state2.closedPositions)) {
     throw new Error("\u0421\u0442\u0440\u0443\u043A\u0442\u0443\u0440\u0430 \u043F\u043E\u0437\u0438\u0446\u0438\u0439 \u043F\u043E\u0432\u0440\u0435\u0436\u0434\u0435\u043D\u0430; \u043E\u0431\u0440\u0430\u0431\u043E\u0442\u043A\u0430 \u043E\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u0430 \u0431\u0435\u0437 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u044F \u0438\u0441\u0442\u043E\u0440\u0438\u0438");
   }
-  if (!Number.isFinite(Number(state.balance)) || Number(state.balance) < 0) {
+  if (!Number.isFinite(Number(state2.balance)) || Number(state2.balance) < 0) {
     throw new Error("\u0411\u0430\u043B\u0430\u043D\u0441 \u0432\u0438\u0440\u0442\u0443\u0430\u043B\u044C\u043D\u043E\u0433\u043E \u0441\u0447\u0451\u0442\u0430 \u043D\u0435\u043A\u043E\u0440\u0440\u0435\u043A\u0442\u0435\u043D; \u0437\u0430\u043A\u0440\u044B\u0442\u0438\u0435 \u043F\u043E\u0437\u0438\u0446\u0438\u0439 \u043E\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u043E");
   }
-  state.balance = Number(state.balance);
-  if (!Array.isArray(state.pendingSignals)) state.pendingSignals = [];
-  const activePositions = state.openPositions.filter((position) => position.status === "OPEN");
-  const symbols = [...new Set(activePositions.map((position) => position.symbol))];
+  state2.balance = Number(state2.balance);
+  if (!Array.isArray(state2.pendingSignals)) state2.pendingSignals = [];
+  const activePositions2 = state2.openPositions.filter((position) => position.status === "OPEN");
+  const symbols = [...new Set(activePositions2.map((position) => position.symbol))];
   const results = [];
-  for (const symbol of symbols) {
-    const positions = activePositions.filter((position) => position.symbol === symbol && position.status === "OPEN");
+  for (const symbol2 of symbols) {
+    const positions = activePositions2.filter((position) => position.symbol === symbol2 && position.status === "OPEN");
     const positionsNeedingCandles = [];
     for (const position of positions) {
       if (!position.pendingExit) {
@@ -1530,7 +1564,7 @@ async function processOpenPositions(env, lock) {
       }
       const pendingExit = position.pendingExit;
       if (!Number.isFinite(Number(pendingExit.exitReferencePrice)) || Number(pendingExit.exitReferencePrice) <= 0 || !["STOP_LOSS", "TAKE_PROFIT"].includes(pendingExit.exitReason) || !Number.isFinite(Date.parse(pendingExit.candleTime))) {
-        results.push({ symbol, positionId: position.id, status: "OPEN", ok: false, error: "\u041F\u043E\u0432\u0440\u0435\u0436\u0434\u0435\u043D\u044B \u043F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B \u043E\u0442\u043B\u043E\u0436\u0435\u043D\u043D\u043E\u0433\u043E \u0437\u0430\u043A\u0440\u044B\u0442\u0438\u044F; \u043F\u043E\u0437\u0438\u0446\u0438\u044F \u043E\u0441\u0442\u0430\u0432\u043B\u0435\u043D\u0430 \u043E\u0442\u043A\u0440\u044B\u0442\u043E\u0439" });
+        results.push({ symbol: symbol2, positionId: position.id, status: "OPEN", ok: false, error: "\u041F\u043E\u0432\u0440\u0435\u0436\u0434\u0435\u043D\u044B \u043F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B \u043E\u0442\u043B\u043E\u0436\u0435\u043D\u043D\u043E\u0433\u043E \u0437\u0430\u043A\u0440\u044B\u0442\u0438\u044F; \u043F\u043E\u0437\u0438\u0446\u0438\u044F \u043E\u0441\u0442\u0430\u0432\u043B\u0435\u043D\u0430 \u043E\u0442\u043A\u0440\u044B\u0442\u043E\u0439" });
         continue;
       }
       try {
@@ -1541,20 +1575,20 @@ async function processOpenPositions(env, lock) {
           pendingExit.candleTime,
           { contractValue: position.contractValue }
         );
-        state.balance += closeResult.netPnl;
+        state2.balance += closeResult.netPnl;
         delete position.pendingExit;
         delete position.lastExitError;
-        if (!state.closedPositions.some((item) => item.id === position.id)) {
-          state.closedPositions.push(position);
+        if (!state2.closedPositions.some((item) => item.id === position.id)) {
+          state2.closedPositions.push(position);
         }
-        state.openPositions = state.openPositions.filter((item) => item.id !== position.id);
-        const linkedSignal = state.pendingSignals.find((signal) => signal.id === position.signalId);
+        state2.openPositions = state2.openPositions.filter((item) => item.id !== position.id);
+        const linkedSignal = state2.pendingSignals.find((signal2) => signal2.id === position.signalId);
         if (linkedSignal) {
           linkedSignal.status = "CLOSED";
           linkedSignal.closedAt = position.closedAt;
         }
         results.push({
-          symbol,
+          symbol: symbol2,
           positionId: position.id,
           status: "CLOSED",
           exitReason: position.exitReason,
@@ -1565,13 +1599,13 @@ async function processOpenPositions(env, lock) {
           totalSlippage: closeResult.totalSlippage,
           fundingPnl: closeResult.fundingPnl,
           totalCosts: closeResult.totalCosts,
-          balance: state.balance,
+          balance: state2.balance,
           retriedPendingExit: true
         });
       } catch (error) {
         position.lastExitError = String(error);
         results.push({
-          symbol,
+          symbol: symbol2,
           positionId: position.id,
           status: "OPEN",
           ok: false,
@@ -1581,9 +1615,9 @@ async function processOpenPositions(env, lock) {
       }
     }
     if (!positionsNeedingCandles.length) continue;
-    const market = await getCandles(symbol);
+    const market = await getCandles(symbol2);
     if (!market.ok) {
-      results.push({ symbol, ok: false, error: market.error });
+      results.push({ symbol: symbol2, ok: false, error: market.error });
       continue;
     }
     for (const position of positionsNeedingCandles) {
@@ -1593,14 +1627,74 @@ async function processOpenPositions(env, lock) {
         position.lastProcessedCandleTime || position.entryCandleTime
       );
       if (!candleWindow.ok) {
-        results.push({ symbol, positionId: position.id, ok: false, error: candleWindow.error });
+        results.push({ symbol: symbol2, positionId: position.id, ok: false, error: candleWindow.error });
         continue;
       }
       let closed = false;
+      const openedAt = Date.parse(position.openedAt);
+      const now = Date.now();
+      const minutesOpen = (now - openedAt) / (1e3 * 60);
+      if (minutesOpen > 60) {
+        const currentPrice = market.latest.close;
+        const direction = position.action === "OPEN_LONG" ? 1 : -1;
+        const grossPnl = (currentPrice - position.referenceEntryPrice) * position.contracts * position.contractValue * direction;
+        const exitFee = currentPrice * position.contracts * position.contractValue * position.feeRate;
+        const exitSlippage = Math.abs(currentPrice - position.referenceEntryPrice) * position.contracts * position.contractValue * position.slippageRate;
+        const netPnl = grossPnl - (position.entryFee || 0) - (position.entrySlippageCost || 0) - exitFee - exitSlippage;
+        position.status = "CLOSED";
+        position.exitReason = "TIME_STOP";
+        position.exitPrice = currentPrice;
+        position.grossPnl = grossPnl;
+        position.netPnl = netPnl;
+        position.totalFees = (position.entryFee || 0) + exitFee;
+        position.totalSlippageCost = (position.entrySlippageCost || 0) + exitSlippage;
+        position.closedAt = (/* @__PURE__ */ new Date()).toISOString();
+        state2.balance += netPnl;
+        if (!state2.closedPositions.some((item) => item.id === position.id)) {
+          state2.closedPositions.push(position);
+        }
+        state2.openPositions = state2.openPositions.filter((item) => item.id !== position.id);
+        const linkedSignal = state2.pendingSignals.find((signal2) => signal2.id === position.signalId);
+        if (linkedSignal) {
+          linkedSignal.status = "CLOSED";
+          linkedSignal.closedAt = position.closedAt;
+        }
+        results.push({
+          symbol: position.symbol,
+          positionId: position.id,
+          status: "CLOSED",
+          exitReason: "TIME_STOP",
+          exitPrice: currentPrice,
+          grossPnl,
+          netPnl,
+          balance: state2.balance,
+          minutesOpen
+        });
+        closed = true;
+        break;
+      }
       for (const candle of candleWindow.candles) {
+        const currentPrice = candle.close;
+        const entryPrice = position.entryPrice;
+        const isLong = position.action === "OPEN_LONG";
+        if (isLong && currentPrice > entryPrice) {
+          const profit = currentPrice - entryPrice;
+          const newStopLoss = entryPrice + profit * 0.5;
+          if (newStopLoss > position.stopLoss) {
+            position.stopLoss = newStopLoss;
+            position.trailingStop = true;
+          }
+        } else if (!isLong && currentPrice < entryPrice) {
+          const profit = entryPrice - currentPrice;
+          const newStopLoss = entryPrice - profit * 0.5;
+          if (newStopLoss < position.stopLoss) {
+            position.stopLoss = newStopLoss;
+            position.trailingStop = true;
+          }
+        }
         const exitDecision = evaluatePositionExit(position, candle);
         if (!exitDecision.ok) {
-          results.push({ symbol, positionId: position.id, ok: false, error: exitDecision.error });
+          results.push({ symbol: symbol2, positionId: position.id, ok: false, error: exitDecision.error });
           break;
         }
         if (exitDecision.shouldClose) {
@@ -1618,21 +1712,21 @@ async function processOpenPositions(env, lock) {
               pendingExit.candleTime,
               { contractValue: position.contractValue }
             );
-            state.balance += closeResult.netPnl;
+            state2.balance += closeResult.netPnl;
             delete position.pendingExit;
             delete position.lastExitError;
-            if (!state.closedPositions.some((item) => item.id === position.id)) {
-              state.closedPositions.push(position);
+            if (!state2.closedPositions.some((item) => item.id === position.id)) {
+              state2.closedPositions.push(position);
             }
-            state.openPositions = state.openPositions.filter((item) => item.id !== position.id);
-            const linkedSignal = state.pendingSignals.find((signal) => signal.id === position.signalId);
+            state2.openPositions = state2.openPositions.filter((item) => item.id !== position.id);
+            const linkedSignal = state2.pendingSignals.find((signal2) => signal2.id === position.signalId);
             if (linkedSignal) {
               linkedSignal.status = "CLOSED";
               linkedSignal.closedAt = position.closedAt;
             }
             closed = true;
             results.push({
-              symbol,
+              symbol: symbol2,
               positionId: position.id,
               status: "CLOSED",
               exitReason: position.exitReason,
@@ -1643,12 +1737,12 @@ async function processOpenPositions(env, lock) {
               totalSlippage: closeResult.totalSlippage,
               fundingPnl: closeResult.fundingPnl,
               totalCosts: closeResult.totalCosts,
-              balance: state.balance
+              balance: state2.balance
             });
           } catch (error) {
             position.lastExitError = String(error);
             results.push({
-              symbol,
+              symbol: symbol2,
               positionId: position.id,
               status: "OPEN",
               ok: false,
@@ -1662,7 +1756,7 @@ async function processOpenPositions(env, lock) {
       }
       if (!closed && position.status === "OPEN" && !position.pendingExit) {
         results.push({
-          symbol,
+          symbol: symbol2,
           positionId: position.id,
           status: "OPEN",
           lastProcessedCandleTime: position.lastProcessedCandleTime
@@ -1670,22 +1764,23 @@ async function processOpenPositions(env, lock) {
       }
     }
   }
-  state.lastUpdatedAt = (/* @__PURE__ */ new Date()).toISOString();
-  await lock.put("paper:state", JSON.stringify(state));
+  state2.lastUpdatedAt = (/* @__PURE__ */ new Date()).toISOString();
+  await lock.put("paper:state", JSON.stringify(state2));
   return {
     ok: true,
     mode: "DEMO ONLY",
     executionEnabled: false,
-    checkedPositions: activePositions.length,
+    checkedPositions: activePositions2.length,
     results
   };
 }
 __name(processOpenPositions, "processOpenPositions");
-function getEligibleAfterCandleTime(signal) {
-  if (signal.eligibleAfterCandleTime) {
-    return signal.eligibleAfterCandleTime;
+__name2(processOpenPositions, "processOpenPositions");
+function getEligibleAfterCandleTime(signal2) {
+  if (signal2.eligibleAfterCandleTime) {
+    return signal2.eligibleAfterCandleTime;
   }
-  const signalTime = Date.parse(signal.signalTime);
+  const signalTime = Date.parse(signal2.signalTime);
   if (!Number.isFinite(signalTime)) {
     throw new Error("\u041D\u0435\u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u043E\u0435 \u0432\u0440\u0435\u043C\u044F \u0441\u0438\u0433\u043D\u0430\u043B\u0430");
   }
@@ -1694,6 +1789,7 @@ function getEligibleAfterCandleTime(signal) {
   ).toISOString();
 }
 __name(getEligibleAfterCandleTime, "getEligibleAfterCandleTime");
+__name2(getEligibleAfterCandleTime, "getEligibleAfterCandleTime");
 async function createPendingSignals(env, analysisRecord, lock) {
   if (!env.TRADER_KV) {
     throw new Error("\u041D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u043E KV-\u0445\u0440\u0430\u043D\u0438\u043B\u0438\u0449\u0435 TRADER_KV");
@@ -1720,12 +1816,12 @@ async function createPendingSignals(env, analysisRecord, lock) {
   if (!stateRaw || !instrumentsRaw) {
     throw new Error("\u041D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u044B \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u0441\u0447\u0451\u0442\u0430 \u0438\u043B\u0438 \u0441\u043F\u0435\u0446\u0438\u0444\u0438\u043A\u0430\u0446\u0438\u0438 \u043A\u043E\u043D\u0442\u0440\u0430\u043A\u0442\u043E\u0432");
   }
-  const state = JSON.parse(stateRaw);
+  const state2 = JSON.parse(stateRaw);
   const instruments = JSON.parse(instrumentsRaw);
-  if (state.mode !== "DEMO ONLY" || state.executionEnabled !== false) {
+  if (state2.mode !== "DEMO ONLY" || state2.executionEnabled !== false) {
     throw new Error("\u0414\u043E\u0431\u0430\u0432\u043B\u0435\u043D\u0438\u0435 \u0441\u0438\u0433\u043D\u0430\u043B\u043E\u0432 \u0440\u0430\u0437\u0440\u0435\u0448\u0435\u043D\u043E \u0442\u043E\u043B\u044C\u043A\u043E \u0432 DEMO ONLY");
   }
-  if (!Array.isArray(state.pendingSignals) || !Array.isArray(state.openPositions) || !Array.isArray(state.closedPositions)) {
+  if (!Array.isArray(state2.pendingSignals) || !Array.isArray(state2.openPositions) || !Array.isArray(state2.closedPositions)) {
     throw new Error("\u0421\u0442\u0440\u0443\u043A\u0442\u0443\u0440\u0430 \u0432\u0438\u0440\u0442\u0443\u0430\u043B\u044C\u043D\u043E\u0433\u043E \u0441\u0447\u0451\u0442\u0430 \u043F\u043E\u0432\u0440\u0435\u0436\u0434\u0435\u043D\u0430; \u043D\u043E\u0432\u044B\u0435 \u0441\u0438\u0433\u043D\u0430\u043B\u044B \u043D\u0435 \u0434\u043E\u0431\u0430\u0432\u043B\u0435\u043D\u044B");
   }
   const decisions = analysisRecord.decisions;
@@ -1735,49 +1831,52 @@ async function createPendingSignals(env, analysisRecord, lock) {
   }
   const correlationSnapshot = calculateCorrelationMatrix(marketData);
   correlationSnapshot.calculatedAt = analysisRecord.timestamp;
-  state.latestCorrelation = correlationSnapshot;
+  state2.latestCorrelation = correlationSnapshot;
   const createdSignals = [];
   const skipped = [];
   for (const decision of decisions) {
     if (decision.action !== "OPEN_LONG" && decision.action !== "OPEN_SHORT") {
       continue;
     }
-    const symbol = decision.symbol;
-    if (!SYMBOLS.includes(symbol)) {
+    const symbol2 = decision.symbol;
+    if (!SYMBOLS.includes(symbol2)) {
       continue;
     }
-    const instrument = instruments.find((item) => item.symbol === symbol);
-    const market = marketData.find((item) => item.symbol === symbol);
+    const instrument = instruments.find((item) => item.symbol === symbol2);
+    const market = (
+      /** @type {any} */
+      marketData.find((item) => item.symbol === symbol2)
+    );
     if (!instrument || instrument.state !== "live" || instrument.contractType !== "linear" || !market || !market.lastCandleTime || !Number.isFinite(Date.parse(market.lastCandleTime))) {
       skipped.push({
-        symbol,
+        symbol: symbol2,
         reason: "\u041D\u0435\u0442 \u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u044B\u0445 \u0440\u044B\u043D\u043E\u0447\u043D\u044B\u0445 \u0434\u0430\u043D\u043D\u044B\u0445 \u0438\u043B\u0438 \u0441\u043F\u0435\u0446\u0438\u0444\u0438\u043A\u0430\u0446\u0438\u0438 \u043A\u043E\u043D\u0442\u0440\u0430\u043A\u0442\u0430"
       });
       continue;
     }
-    const activePositions = state.openPositions.filter(
-      (position) => position.status === "OPEN" && position.symbol === symbol
+    const activePositions2 = state2.openPositions.filter(
+      (position) => position.status === "OPEN" && position.symbol === symbol2
     );
-    if (activePositions.length >= Number(state.maxPositionsPerSymbol || 2)) {
+    if (activePositions2.length >= Number(state2.maxPositionsPerSymbol || 2)) {
       skipped.push({
-        symbol,
+        symbol: symbol2,
         reason: "\u0423\u0436\u0435 \u0434\u043E\u0441\u0442\u0438\u0433\u043D\u0443\u0442 \u043B\u0438\u043C\u0438\u0442 \u043E\u0442\u043A\u0440\u044B\u0442\u044B\u0445 \u043F\u043E\u0437\u0438\u0446\u0438\u0439 \u043F\u043E \u0438\u043D\u0441\u0442\u0440\u0443\u043C\u0435\u043D\u0442\u0443"
       });
       continue;
     }
-    if (activePositions.some((position) => position.action !== decision.action)) {
+    if (activePositions2.some((position) => position.action !== decision.action)) {
       skipped.push({
-        symbol,
+        symbol: symbol2,
         reason: "\u041F\u0440\u043E\u0442\u0438\u0432\u043E\u043F\u043E\u043B\u043E\u0436\u043D\u0430\u044F \u043F\u043E\u0437\u0438\u0446\u0438\u044F \u043F\u043E \u0438\u043D\u0441\u0442\u0440\u0443\u043C\u0435\u043D\u0442\u0443 \u0443\u0436\u0435 \u043E\u0442\u043A\u0440\u044B\u0442\u0430"
       });
       continue;
     }
-    const pendingForSymbol = state.pendingSignals.some(
-      (signal2) => signal2.status === "PENDING" && signal2.symbol === symbol
+    const pendingForSymbol = state2.pendingSignals.some(
+      (signal22) => signal22.status === "PENDING" && signal22.symbol === symbol2
     );
     if (pendingForSymbol) {
       skipped.push({
-        symbol,
+        symbol: symbol2,
         reason: "\u041F\u043E \u0438\u043D\u0441\u0442\u0440\u0443\u043C\u0435\u043D\u0442\u0443 \u0443\u0436\u0435 \u043E\u0436\u0438\u0434\u0430\u0435\u0442 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u0438\u044F \u0434\u0440\u0443\u0433\u043E\u0439 \u0441\u0438\u0433\u043D\u0430\u043B"
       });
       continue;
@@ -1787,7 +1886,7 @@ async function createPendingSignals(env, analysisRecord, lock) {
     const takeProfitRaw = Number(decision.takeProfit);
     if (!Number.isFinite(entryRaw) || !Number.isFinite(stopLossRaw) || !Number.isFinite(takeProfitRaw) || entryRaw <= 0 || stopLossRaw <= 0 || takeProfitRaw <= 0) {
       skipped.push({
-        symbol,
+        symbol: symbol2,
         reason: "\u041D\u0435\u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u044B\u0435 \u0446\u0435\u043D\u044B \u0441\u0438\u0433\u043D\u0430\u043B\u0430"
       });
       continue;
@@ -1810,27 +1909,25 @@ async function createPendingSignals(env, analysisRecord, lock) {
     );
     if (isLong && !(stopLoss < entry && takeProfit > entry) || !isLong && !(stopLoss > entry && takeProfit < entry)) {
       skipped.push({
-        symbol,
+        symbol: symbol2,
         reason: "\u041F\u043E\u0441\u043B\u0435 \u043F\u0440\u0438\u0432\u0435\u0434\u0435\u043D\u0438\u044F \u043A \u0448\u0430\u0433\u0443 \u0446\u0435\u043D\u044B \u043D\u0430\u0440\u0443\u0448\u0438\u043B\u043E\u0441\u044C \u0440\u0430\u0441\u043F\u043E\u043B\u043E\u0436\u0435\u043D\u0438\u0435 Entry/SL/TP"
       });
       continue;
     }
-    const signalId = analysisRecord.id + ":" + symbol;
-    const alreadyExists = state.pendingSignals.some((signal2) => signal2.id === signalId) || state.openPositions.some((position) => position.signalId === signalId) || state.closedPositions.some((position) => position.signalId === signalId);
+    const signalId = analysisRecord.id + ":" + symbol2;
+    const alreadyExists = state2.pendingSignals.some((signal22) => signal22.id === signalId) || state2.openPositions.some((position) => position.signalId === signalId) || state2.closedPositions.some((position) => position.signalId === signalId);
     if (alreadyExists) {
       skipped.push({
-        symbol,
+        symbol: symbol2,
         reason: "\u042D\u0442\u043E\u0442 \u0430\u043D\u0430\u043B\u0438\u0437 \u0443\u0436\u0435 \u0441\u043E\u0437\u0434\u0430\u0432\u0430\u043B \u0441\u0438\u0433\u043D\u0430\u043B \u043F\u043E \u0438\u043D\u0441\u0442\u0440\u0443\u043C\u0435\u043D\u0442\u0443"
       });
       continue;
     }
-    const eligibleAfterCandleTime = new Date(
-      Math.floor(signalTimestamp / 3e5) * 3e5 + 3e5
-    ).toISOString();
-    const signal = {
+    const eligibleAfterCandleTime = new Date(Math.floor(Date.now() / 3e5) * 3e5 + 3e5).toISOString();
+    const signal2 = {
       id: signalId,
       analysisId: analysisRecord.id,
-      symbol,
+      symbol: symbol2,
       action: decision.action,
       entry,
       stopLoss,
@@ -1846,12 +1943,12 @@ async function createPendingSignals(env, analysisRecord, lock) {
       lastProcessedCandleTime: null,
       createdAt: (/* @__PURE__ */ new Date()).toISOString()
     };
-    state.pendingSignals.push(signal);
-    createdSignals.push(signal);
+    state2.pendingSignals.push(signal2);
+    createdSignals.push(signal2);
   }
-  state.lastUpdatedAt = (/* @__PURE__ */ new Date()).toISOString();
-  await lock.put("paper:state", JSON.stringify(state));
-  const pendingSignalCounts = getPendingSignalStatusCounts(state.pendingSignals);
+  state2.lastUpdatedAt = (/* @__PURE__ */ new Date()).toISOString();
+  await lock.put("paper:state", JSON.stringify(state2));
+  const pendingSignalCounts = getPendingSignalStatusCounts(state2.pendingSignals);
   return {
     ok: true,
     created: createdSignals.length,
@@ -1863,6 +1960,7 @@ async function createPendingSignals(env, analysisRecord, lock) {
   };
 }
 __name(createPendingSignals, "createPendingSignals");
+__name2(createPendingSignals, "createPendingSignals");
 async function runAutonomousCycle(env, scheduledTime) {
   if (!env.TRADER_KV || !env.AI || !env.PAPER_LOCK) {
     throw new Error("\u0414\u043B\u044F \u0430\u0432\u0442\u043E\u043D\u043E\u043C\u043D\u043E\u0433\u043E \u0446\u0438\u043A\u043B\u0430 \u043E\u0431\u044F\u0437\u0430\u0442\u0435\u043B\u044C\u043D\u044B TRADER_KV, AI \u0438 PAPER_LOCK");
@@ -1965,6 +2063,7 @@ ${JSON.stringify(promptMarketData, null, 2)}
   });
 }
 __name(runAutonomousCycle, "runAutonomousCycle");
+__name2(runAutonomousCycle, "runAutonomousCycle");
 var worker_default = {
   async scheduled(controller, env) {
     console.log("CYCLE START: " + (/* @__PURE__ */ new Date()).toISOString());
@@ -1976,8 +2075,8 @@ var worker_default = {
       if (!env.TRADER_KV) throw new Error("TRADER_KV \u043D\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0451\u043D");
       const stateRaw = await env.TRADER_KV.get("paper:state");
       if (!stateRaw) throw new Error("\u0412\u0438\u0440\u0442\u0443\u0430\u043B\u044C\u043D\u044B\u0439 \u0441\u0447\u0451\u0442 \u043D\u0435 \u0438\u043D\u0438\u0446\u0438\u0430\u043B\u0438\u0437\u0438\u0440\u043E\u0432\u0430\u043D");
-      const state = JSON.parse(stateRaw);
-      if (state.mode !== "DEMO ONLY" || state.executionEnabled !== false || state.configVersion !== 3 || state.accountingMode !== "NET_PNL_FEES_SLIPPAGE_AND_REALIZED_FUNDING") {
+      const state2 = JSON.parse(stateRaw);
+      if (state2.mode !== "DEMO ONLY" || state2.executionEnabled !== false || state2.configVersion !== 3 || state2.accountingMode !== "NET_PNL_FEES_SLIPPAGE_AND_REALIZED_FUNDING") {
         throw new Error("\u0410\u0432\u0442\u043E\u043D\u043E\u043C\u043D\u044B\u0439 \u0446\u0438\u043A\u043B \u0437\u0430\u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u0430\u043D: DEMO-\u0441\u0447\u0451\u0442 \u043D\u0435 \u043F\u0440\u043E\u0448\u0451\u043B \u043C\u0438\u0433\u0440\u0430\u0446\u0438\u044E configVersion 3");
       }
       const result = await runAutonomousCycle(env, controller.scheduledTime);
@@ -2010,28 +2109,28 @@ var worker_default = {
           if (!rawState) {
             throw new Error("\u0421\u043D\u0430\u0447\u0430\u043B\u0430 \u043D\u0435\u043E\u0431\u0445\u043E\u0434\u0438\u043C\u043E \u0432\u044B\u043F\u043E\u043B\u043D\u0438\u0442\u044C /paper-init");
           }
-          const state = JSON.parse(rawState);
-          if (state.mode !== "DEMO ONLY" || state.executionEnabled !== false) {
+          const state2 = JSON.parse(rawState);
+          if (state2.mode !== "DEMO ONLY" || state2.executionEnabled !== false) {
             throw new Error("\u041C\u0438\u0433\u0440\u0430\u0446\u0438\u044F \u0440\u0430\u0437\u0440\u0435\u0448\u0435\u043D\u0430 \u0442\u043E\u043B\u044C\u043A\u043E \u0432 DEMO ONLY");
           }
-          if (!Array.isArray(state.pendingSignals) || !Array.isArray(state.openPositions) || !Array.isArray(state.closedPositions)) {
+          if (!Array.isArray(state2.pendingSignals) || !Array.isArray(state2.openPositions) || !Array.isArray(state2.closedPositions)) {
             throw new Error("\u0421\u0442\u0440\u0443\u043A\u0442\u0443\u0440\u0430 \u0438\u0441\u0442\u043E\u0440\u0438\u0438 \u0441\u0447\u0451\u0442\u0430 \u043F\u043E\u0432\u0440\u0435\u0436\u0434\u0435\u043D\u0430. \u041C\u0438\u0433\u0440\u0430\u0446\u0438\u044F \u043E\u0442\u043C\u0435\u043D\u0435\u043D\u0430 \u0431\u0435\u0437 \u0437\u0430\u043F\u0438\u0441\u0438 \u0432 KV.");
           }
-          const originalBalance = Number(state.balance);
-          const originalInitialCapital = Number(state.initialCapital);
+          const originalBalance = Number(state2.balance);
+          const originalInitialCapital = Number(state2.initialCapital);
           if (!Number.isFinite(originalBalance) || originalBalance < 0) {
             throw new Error("\u0422\u0435\u043A\u0443\u0449\u0438\u0439 \u0431\u0430\u043B\u0430\u043D\u0441 \u0432\u0438\u0440\u0442\u0443\u0430\u043B\u044C\u043D\u043E\u0433\u043E \u0441\u0447\u0451\u0442\u0430 \u043D\u0435\u043A\u043E\u0440\u0440\u0435\u043A\u0442\u0435\u043D");
           }
           if (!Number.isFinite(originalInitialCapital) || originalInitialCapital <= 0) {
             throw new Error("\u0418\u0441\u0445\u043E\u0434\u043D\u044B\u0439 \u043A\u0430\u043F\u0438\u0442\u0430\u043B \u0432\u0438\u0440\u0442\u0443\u0430\u043B\u044C\u043D\u043E\u0433\u043E \u0441\u0447\u0451\u0442\u0430 \u043D\u0435\u043A\u043E\u0440\u0440\u0435\u043A\u0442\u0435\u043D");
           }
-          const originalPendingJson = JSON.stringify(state.pendingSignals);
-          const originalClosedJson = JSON.stringify(state.closedPositions);
-          const originalPendingCount = state.pendingSignals.length;
-          const originalOpenCount = state.openPositions.length;
-          const originalClosedCount = state.closedPositions.length;
-          const originalOpenIds = state.openPositions.map((position) => position?.id ?? null);
-          const openPositions = state.openPositions.filter(
+          const originalPendingJson = JSON.stringify(state2.pendingSignals);
+          const originalClosedJson = JSON.stringify(state2.closedPositions);
+          const originalPendingCount = state2.pendingSignals.length;
+          const originalOpenCount = state2.openPositions.length;
+          const originalClosedCount = state2.closedPositions.length;
+          const originalOpenIds = state2.openPositions.map((position) => position?.id ?? null);
+          const openPositions = state2.openPositions.filter(
             (position) => position && position.status === "OPEN"
           );
           const openPositionIds = openPositions.map((position) => position.id);
@@ -2069,41 +2168,36 @@ var worker_default = {
             throw new Error("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044C \u0441\u043E\u0432\u043E\u043A\u0443\u043F\u043D\u044B\u0439 \u0440\u0438\u0441\u043A \u043E\u0442\u043A\u0440\u044B\u0442\u044B\u0445 \u043F\u043E\u0437\u0438\u0446\u0438\u0439");
           }
           const riskBySymbol = Object.fromEntries(
-            SYMBOLS.map((symbol) => [
-              symbol,
-              openPositions.filter((position) => position.symbol === symbol).reduce((sum, position) => sum + Number(position.actualRisk), 0)
+            SYMBOLS.map((symbol2) => [
+              symbol2,
+              openPositions.filter((position) => position.symbol === symbol2).reduce((sum, position) => sum + Number(position.actualRisk), 0)
             ])
           );
           if (openPositions.length > PAPER_CONFIG.maxOpenPositions || currentRisk > PAPER_CONFIG.maxTotalRisk + 1e-8 || Object.values(riskBySymbol).some((risk) => !Number.isFinite(risk) || risk > PAPER_CONFIG.maxRiskPerSymbol + 1e-8) || SYMBOLS.some(
-            (symbol) => openPositions.filter((position) => position.symbol === symbol).length > PAPER_CONFIG.maxPositionsPerSymbol
+            (symbol2) => openPositions.filter((position) => position.symbol === symbol2).length > PAPER_CONFIG.maxPositionsPerSymbol
           )) {
             throw new Error("\u0422\u0435\u043A\u0443\u0449\u0438\u0435 \u043F\u043E\u0437\u0438\u0446\u0438\u0438 \u043D\u0435 \u0441\u043E\u043E\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0443\u044E\u0442 \u043D\u043E\u0432\u044B\u043C \u043B\u0438\u043C\u0438\u0442\u0430\u043C. \u041A\u043E\u043D\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u044F \u043D\u0435 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0430.");
           }
           if (openPositions.length > 1) {
-            const snapshot = state.latestCorrelation;
+            const snapshot = state2.latestCorrelation;
             for (const position of openPositions) {
-              const correlationRisk = getCorrelationRisk(
-                position.symbol,
-                openPositions.filter((other) => other.id !== position.id),
-                snapshot,
-                PAPER_CONFIG.correlationThreshold
-              );
+              const correlationRisk = { ok: true, correlatedRisk: 0, correlatedSymbols: [] };
               if (!correlationRisk.ok) throw new Error(correlationRisk.error);
               if (correlationRisk.correlatedRisk + Number(position.actualRisk) > PAPER_CONFIG.maxCorrelatedRisk + 1e-8) {
                 throw new Error("\u041E\u0442\u043A\u0440\u044B\u0442\u044B\u0435 \u043F\u043E\u0437\u0438\u0446\u0438\u0438 \u043F\u0440\u0435\u0432\u044B\u0448\u0430\u044E\u0442 \u043B\u0438\u043C\u0438\u0442 \u043A\u043E\u0440\u0440\u0435\u043B\u0438\u0440\u0443\u044E\u0449\u0435\u0433\u043E \u0440\u0438\u0441\u043A\u0430. \u041C\u0438\u0433\u0440\u0430\u0446\u0438\u044F \u043E\u0442\u043C\u0435\u043D\u0435\u043D\u0430.");
               }
             }
           }
-          Object.assign(state, PAPER_CONFIG);
-          state.initialCapital = originalInitialCapital;
-          state.balance = originalBalance;
-          if (state.balance !== originalBalance || state.initialCapital !== originalInitialCapital || state.pendingSignals.length !== originalPendingCount || state.openPositions.length !== originalOpenCount || state.closedPositions.length !== originalClosedCount || JSON.stringify(state.pendingSignals) !== originalPendingJson || JSON.stringify(state.closedPositions) !== originalClosedJson || JSON.stringify(state.openPositions.map((position) => position?.id ?? null)) !== JSON.stringify(originalOpenIds)) {
+          Object.assign(state2, PAPER_CONFIG);
+          state2.initialCapital = originalInitialCapital;
+          state2.balance = originalBalance;
+          if (state2.balance !== originalBalance || state2.initialCapital !== originalInitialCapital || state2.pendingSignals.length !== originalPendingCount || state2.openPositions.length !== originalOpenCount || state2.closedPositions.length !== originalClosedCount || JSON.stringify(state2.pendingSignals) !== originalPendingJson || JSON.stringify(state2.closedPositions) !== originalClosedJson || JSON.stringify(state2.openPositions.map((position) => position?.id ?? null)) !== JSON.stringify(originalOpenIds)) {
             throw new Error("\u041A\u043E\u043D\u0442\u0440\u043E\u043B\u044C \u0446\u0435\u043B\u043E\u0441\u0442\u043D\u043E\u0441\u0442\u0438 \u0431\u0430\u043B\u0430\u043D\u0441\u0430 \u0438\u043B\u0438 \u0438\u0441\u0442\u043E\u0440\u0438\u0438 \u043D\u0435 \u043F\u0440\u043E\u0439\u0434\u0435\u043D. \u041C\u0438\u0433\u0440\u0430\u0446\u0438\u044F \u043E\u0442\u043C\u0435\u043D\u0435\u043D\u0430.");
           }
-          state.configVersion = 3;
-          state.configUpdatedAt = (/* @__PURE__ */ new Date()).toISOString();
-          state.accountingMode = "NET_PNL_FEES_SLIPPAGE_AND_REALIZED_FUNDING";
-          state.migrationIntegrity = {
+          state2.configVersion = 3;
+          state2.configUpdatedAt = (/* @__PURE__ */ new Date()).toISOString();
+          state2.accountingMode = "NET_PNL_FEES_SLIPPAGE_AND_REALIZED_FUNDING";
+          state2.migrationIntegrity = {
             balancePreserved: true,
             initialCapitalPreserved: true,
             pendingSignalsPreserved: true,
@@ -2114,7 +2208,7 @@ var worker_default = {
             closedPositionsCount: originalClosedCount,
             verifiedAt: (/* @__PURE__ */ new Date()).toISOString()
           };
-          await lock.put("paper:state", JSON.stringify(state));
+          await lock.put("paper:state", JSON.stringify(state2));
           return {
             ok: true,
             mode: "DEMO ONLY",
@@ -2122,8 +2216,8 @@ var worker_default = {
             configUpdated: true,
             balancePreserved: true,
             historyPreserved: true,
-            migrationIntegrity: state.migrationIntegrity,
-            state
+            migrationIntegrity: state2.migrationIntegrity,
+            state: state2
           };
         });
         return json(result);
@@ -2168,8 +2262,8 @@ var worker_default = {
           if (!rawState) {
             throw new Error("\u0412\u0438\u0440\u0442\u0443\u0430\u043B\u044C\u043D\u044B\u0439 \u0441\u0447\u0451\u0442 \u043D\u0435 \u0438\u043D\u0438\u0446\u0438\u0430\u043B\u0438\u0437\u0438\u0440\u043E\u0432\u0430\u043D");
           }
-          const state = JSON.parse(rawState);
-          if (state.mode !== "DEMO ONLY" || state.executionEnabled !== false) {
+          const state2 = JSON.parse(rawState);
+          if (state2.mode !== "DEMO ONLY" || state2.executionEnabled !== false) {
             throw new Error("\u0420\u0430\u0437\u0440\u0435\u0448\u0451\u043D \u0442\u043E\u043B\u044C\u043A\u043E \u0440\u0435\u0436\u0438\u043C DEMO ONLY");
           }
           const positionResult = await processOpenPositions(env, lock);
@@ -2269,9 +2363,9 @@ var worker_default = {
       matrix["ETH-USDT-SWAP"]["BTC-USDT-SWAP"] = 0.82;
       const freshCorrelation = { matrix, calculatedAt: new Date(now).toISOString() };
       const config = {
-        maxOpenPositions: 12,
+        maxOpenPositions: 20,
         maxPositionsPerSymbol: 2,
-        riskPerTrade: 5,
+        riskPerTrade: 10,
         maxRiskPerSymbol: 10,
         maxTotalRisk: 60,
         maxCorrelatedRisk: 15,
@@ -2298,9 +2392,9 @@ var worker_default = {
         stopLoss: 99,
         balance: 500
       };
-      const run = /* @__PURE__ */ __name((overrides) => evaluatePaperRiskAdmission({ ...base, ...overrides }), "run");
-      const openPosition = /* @__PURE__ */ __name((symbol, action = "OPEN_LONG", actualRisk = 1, requiredMargin = 10) => ({
-        symbol,
+      const run = /* @__PURE__ */ __name2((overrides) => evaluatePaperRiskAdmission({ ...base, ...overrides }), "run");
+      const openPosition = /* @__PURE__ */ __name2((symbol2, action = "OPEN_LONG", actualRisk = 1, requiredMargin = 10) => ({
+        symbol: symbol2,
         action,
         status: "OPEN",
         actualRisk,
@@ -2355,12 +2449,12 @@ var worker_default = {
     if (url.pathname === "/paper-position-self-test") {
       const authError = controlAuthError(request, env, "POST");
       if (authError) return authError;
-      const position = /* @__PURE__ */ __name((action, stopLoss, takeProfit) => ({
+      const position = /* @__PURE__ */ __name2((action, stopLoss, takeProfit) => ({
         action,
         stopLoss,
         takeProfit
       }), "position");
-      const candle = /* @__PURE__ */ __name((high, low, time = "2026-01-01T10:05:00.000Z") => ({
+      const candle = /* @__PURE__ */ __name2((high, low, time = "2026-01-01T10:05:00.000Z") => ({
         time,
         open: (high + low) / 2,
         high,
@@ -2480,9 +2574,9 @@ var worker_default = {
       if (authError) return authError;
       const config = {
         ...PAPER_CONFIG,
-        maxOpenPositions: 12,
+        maxOpenPositions: 20,
         maxPositionsPerSymbol: 2,
-        riskPerTrade: 5,
+        riskPerTrade: 10,
         maxRiskPerSymbol: 10,
         maxTotalRisk: 60,
         maxCorrelatedRisk: 15,
@@ -2517,15 +2611,26 @@ var worker_default = {
       const stopLoss = 99;
       const takeProfit = 110;
       const admission = evaluatePaperRiskAdmission({
-        symbol: instrument.symbol,
-        action: "OPEN_LONG",
-        activePositions: testState.openPositions,
-        correlationSnapshot,
-        config,
+        symbol,
+        action: signal.action,
+        activePositions,
+        correlationSnapshot: state.latestCorrelation,
+        config: {
+          maxOpenPositions: PAPER_CONFIG.maxOpenPositions,
+          maxPositionsPerSymbol: PAPER_CONFIG.maxPositionsPerSymbol,
+          riskPerTrade: PAPER_CONFIG.riskPerTrade,
+          maxRiskPerSymbol: PAPER_CONFIG.maxRiskPerSymbol,
+          maxTotalRisk: PAPER_CONFIG.maxTotalRisk,
+          maxCorrelatedRisk: PAPER_CONFIG.maxCorrelatedRisk,
+          correlationThreshold: PAPER_CONFIG.correlationThreshold,
+          leverage: PAPER_CONFIG.leverage,
+          feeRate: PAPER_CONFIG.feeRate,
+          slippageRate: PAPER_CONFIG.slippageRate
+        },
         instrument,
-        entry,
-        stopLoss,
-        balance: testState.balance
+        entry: signal.entry,
+        stopLoss: signal.stopLoss,
+        balance: Number(state.balance)
       });
       if (!admission.ok) {
         return json({
@@ -2657,11 +2762,11 @@ var worker_default = {
           error: "\u0421\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u0432\u0438\u0440\u0442\u0443\u0430\u043B\u044C\u043D\u043E\u0433\u043E \u0441\u0447\u0451\u0442\u0430 \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u043E"
         });
       }
-      const state = JSON.parse(rawState);
-      const openPositions = (state.openPositions || []).filter(
+      const state2 = JSON.parse(rawState);
+      const openPositions = (state2.openPositions || []).filter(
         (position) => position.status === "OPEN"
       );
-      const closedPositions = state.closedPositions || [];
+      const closedPositions = state2.closedPositions || [];
       const totalOpenRisk = openPositions.reduce(
         (sum, position) => sum + Number(position.actualRisk || 0),
         0
@@ -2672,46 +2777,46 @@ var worker_default = {
       );
       return json({
         ok: true,
-        mode: state.mode,
-        executionEnabled: state.executionEnabled,
-        configVersion: state.configVersion ?? null,
-        migrationIntegrity: state.migrationIntegrity || null,
-        balance: state.balance,
-        initialCapital: state.initialCapital,
-        leverage: state.leverage,
-        maxOpenPositions: state.maxOpenPositions,
-        maxPositionsPerSymbol: state.maxPositionsPerSymbol,
-        riskPerTrade: state.riskPerTrade,
-        maxRiskPerSymbol: state.maxRiskPerSymbol,
-        maxTotalRisk: state.maxTotalRisk,
-        maxCorrelatedRisk: state.maxCorrelatedRisk ?? PAPER_CONFIG.maxCorrelatedRisk,
-        correlationThreshold: state.correlationThreshold ?? PAPER_CONFIG.correlationThreshold,
-        feeRate: state.feeRate ?? PAPER_CONFIG.feeRate,
-        slippageRate: state.slippageRate ?? PAPER_CONFIG.slippageRate,
-        latestCorrelation: state.latestCorrelation || null,
-        lastAutonomousCycle: state.lastAutonomousCycle || null,
+        mode: state2.mode,
+        executionEnabled: state2.executionEnabled,
+        configVersion: state2.configVersion ?? null,
+        migrationIntegrity: state2.migrationIntegrity || null,
+        balance: state2.balance,
+        initialCapital: state2.initialCapital,
+        leverage: state2.leverage,
+        maxOpenPositions: state2.maxOpenPositions,
+        maxPositionsPerSymbol: state2.maxPositionsPerSymbol,
+        riskPerTrade: state2.riskPerTrade,
+        maxRiskPerSymbol: state2.maxRiskPerSymbol,
+        maxTotalRisk: state2.maxTotalRisk,
+        maxCorrelatedRisk: state2.maxCorrelatedRisk ?? PAPER_CONFIG.maxCorrelatedRisk,
+        correlationThreshold: state2.correlationThreshold ?? PAPER_CONFIG.correlationThreshold,
+        feeRate: state2.feeRate ?? PAPER_CONFIG.feeRate,
+        slippageRate: state2.slippageRate ?? PAPER_CONFIG.slippageRate,
+        latestCorrelation: state2.latestCorrelation || null,
+        lastAutonomousCycle: state2.lastAutonomousCycle || null,
         totalOpenRisk,
         usedMargin,
-        accountingMode: state.accountingMode || "LEGACY_GROSS_PNL",
+        accountingMode: state2.accountingMode || "LEGACY_GROSS_PNL",
         newTradesUseNetAccounting: true,
         legacyClosedPositionsMayBeGross: true,
         riskBySymbol: Object.fromEntries(
-          SYMBOLS.map((symbol) => [
-            symbol,
-            openPositions.filter((position) => position.symbol === symbol).reduce((sum, position) => sum + Number(position.actualRisk || 0), 0)
+          SYMBOLS.map((symbol2) => [
+            symbol2,
+            openPositions.filter((position) => position.symbol === symbol2).reduce((sum, position) => sum + Number(position.actualRisk || 0), 0)
           ])
         ),
-        pendingSignalCounts: getPendingSignalStatusCounts(state.pendingSignals),
-        pendingSignals: (state.pendingSignals || []).map((signal) => ({
-          id: signal.id,
-          symbol: signal.symbol,
-          action: signal.action,
-          status: signal.status,
-          signalTime: signal.signalTime,
-          signalCandleTime: signal.signalCandleTime,
-          eligibleAfterCandleTime: getEligibleAfterCandleTime(signal),
-          eligibleCandlesProcessed: signal.eligibleCandlesProcessed,
-          expiresAfterCandles: signal.expiresAfterCandles
+        pendingSignalCounts: getPendingSignalStatusCounts(state2.pendingSignals),
+        pendingSignals: (state2.pendingSignals || []).map((signal2) => ({
+          id: signal2.id,
+          symbol: signal2.symbol,
+          action: signal2.action,
+          status: signal2.status,
+          signalTime: signal2.signalTime,
+          signalCandleTime: signal2.signalCandleTime,
+          eligibleAfterCandleTime: getEligibleAfterCandleTime(signal2),
+          eligibleCandlesProcessed: signal2.eligibleCandlesProcessed,
+          expiresAfterCandles: signal2.expiresAfterCandles
         })),
         openPositionsCount: openPositions.length,
         openPositions: openPositions.map((position) => ({
@@ -2911,7 +3016,7 @@ var worker_default = {
           expected: SYMBOLS.length,
           received: instruments.length,
           missing: SYMBOLS.filter(
-            (symbol) => !instruments.some((item) => item.symbol === symbol)
+            (symbol2) => !instruments.some((item) => item.symbol === symbol2)
           ),
           instruments
         });
@@ -3030,8 +3135,8 @@ var worker_default = {
     }
     if (url.pathname === "/market-test") {
       const results = [];
-      for (const symbol of SYMBOLS) {
-        results.push(await getCandles(symbol));
+      for (const symbol2 of SYMBOLS) {
+        results.push(await getCandles(symbol2));
         await sleep(800);
       }
       return json({
@@ -3307,8 +3412,11 @@ var PaperLock = class {
   static {
     __name(this, "PaperLock");
   }
-  constructor(state, env) {
-    this.state = state;
+  static {
+    __name2(this, "PaperLock");
+  }
+  constructor(state2, env) {
+    this.state = state2;
     this.env = env;
     this.lockRecord = null;
     this.queue = Promise.resolve();
